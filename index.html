@@ -190,6 +190,13 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--grey);min-heig
         <div style="font-size:12px;color:#888;margin-top:2px;" id="info-count">–</div>
       </div>
       <div class="card">
+        <div class="card-title">SharePoint</div>
+        <div style="font-size:11px;color:#666;font-family:monospace;word-break:break-all;">
+          Site: tschoppag.sharepoint.com/sites/Instandhaltung<br>
+          Ordner: /ET-Liste/
+        </div>
+      </div>
+      <div class="card">
         <div class="card-title">Redirect URI (aktiv)</div>
         <div id="info-redirect" style="font-size:11px;color:#666;font-family:monospace;word-break:break-all;">–</div>
       </div>
@@ -210,17 +217,26 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--grey);min-heig
 <div class="toast" id="toast">OK</div>
 
 <script>
+// ===== KONFIGURATION =====
 const CLIENT_ID = 'e3b6b827-701a-47d4-bcab-c0bc9d8569b0';
 const TENANT_ID = '5ff1010c-565a-45ad-932a-b32c6606b8f7';
 
-// FIX: Redirect-URI wird zur Laufzeit aus dem tatsächlichen Browser-Ort ermittelt.
-// Das verhindert Gross/Klein-Probleme: Der Browser weiss selbst, welche URL er öffnet.
-const REDIRECT = window.location.origin + window.location.pathname;
+// SharePoint Konfiguration
+const SP_HOSTNAME = 'tschoppag.sharepoint.com';
+const SP_SITE_PATH = '/sites/Instandhaltung';
+const SP_FOLDER_PATH = '/ET-Liste'; // Unter "Freigegebene Dokumente"
+const SP_FILENAME = 'ET-Liste_Tschopp_Final V2.xlsm';
 
+// Excel Konfiguration
 const ET_SHEET = 'ET-Liste';
 const FIRST_ROW = 7;
+
+// Mail
 const MAIL_TO = 'flavio.wyss@tschopp.swiss';
 const MAIL_CC = 'christopher.nagel@tschopp.swiss';
+
+// Dynamische Redirect-URI
+const REDIRECT = window.location.origin + window.location.pathname;
 
 const msalConfig = {
   auth: {
@@ -232,16 +248,17 @@ const msalConfig = {
 };
 
 const msalInst = new msal.PublicClientApplication(msalConfig);
-const SCOPES = ['Files.ReadWrite', 'User.Read', 'Mail.Send'];
+// WICHTIG: Sites.ReadWrite.All für SharePoint
+const SCOPES = ['Files.ReadWrite', 'Sites.ReadWrite.All', 'User.Read', 'Mail.Send'];
 
-let token = '', fileId = '', userEmail = '', userName = '';
+let token = '', siteId = '', driveId = '', fileId = '';
+let userEmail = '', userName = '';
 let currentET = null, menge = 1, buchTyp = 'abgang';
 let etData = {}, bookings = [];
 let codeReader = null;
 let lastScan = '', lastScanTime = 0;
 
 window.onload = async () => {
-  // Zeige aktive Redirect-URI im Info-Tab (hilft beim Debuggen)
   document.getElementById('info-redirect').textContent = REDIRECT;
 
   try {
@@ -300,7 +317,7 @@ async function afterLogin() {
   document.getElementById('user-badge').style.display = 'flex';
   document.getElementById('user-name').textContent = userName;
   document.getElementById('info-email').textContent = userEmail;
-  showLoading('ET-Daten werden geladen…');
+  showLoading('SharePoint wird verbunden…');
   await loadETData();
   hideLoading();
   startScanner();
@@ -312,14 +329,17 @@ async function refreshToken() {
     try {
       const sr = await msalInst.acquireTokenSilent({ scopes: SCOPES, account: accs[0] });
       token = sr.accessToken;
-    } catch (e) { console.warn('Token-Refresh fehlgeschlagen:', e); }
+    } catch (e) { console.warn('Token-Refresh:', e); }
   }
 }
 
 async function gGet(url) {
   await refreshToken();
   const r = await fetch('https://graph.microsoft.com/v1.0' + url, { headers: { Authorization: 'Bearer ' + token } });
-  if (!r.ok) throw new Error('GET ' + r.status + ' → ' + url);
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error('GET ' + r.status + ' → ' + url + ' | ' + txt.substring(0, 200));
+  }
   return r.json();
 }
 
@@ -330,7 +350,10 @@ async function gPatch(url, body) {
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
-  if (!r.ok) throw new Error('PATCH ' + r.status + ' → ' + url);
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error('PATCH ' + r.status + ' | ' + txt.substring(0, 200));
+  }
   return r.json();
 }
 
@@ -344,16 +367,40 @@ async function gPost(url, body) {
   return r.status;
 }
 
+// ===== SHAREPOINT: Site → Drive → File =====
+async function findSharePointFile() {
+  document.getElementById('info-file').textContent = '🔍 Suche SharePoint-Site…';
+  const site = await gGet(`/sites/${SP_HOSTNAME}:${SP_SITE_PATH}`);
+  siteId = site.id;
+
+  document.getElementById('info-file').textContent = '🔍 Suche Dokumentenbibliothek…';
+  const drive = await gGet(`/sites/${siteId}/drive`);
+  driveId = drive.id;
+
+  document.getElementById('info-file').textContent = '🔍 Suche Datei in ' + SP_FOLDER_PATH + '…';
+  const items = await gGet(`/drives/${driveId}/root:${SP_FOLDER_PATH}:/children`);
+
+  if (!items.value || !items.value.length) {
+    throw new Error('Ordner ' + SP_FOLDER_PATH + ' ist leer');
+  }
+
+  let file = items.value.find(it => it.name && it.name.toLowerCase() === SP_FILENAME.toLowerCase());
+  if (!file) {
+    file = items.value.find(it => it.name && it.name.toLowerCase().endsWith('.xlsm'));
+    if (!file) throw new Error('Keine .xlsm Datei im Ordner');
+  }
+
+  fileId = file.id;
+  document.getElementById('info-file').textContent = '📁 ' + file.name + ' (SharePoint)';
+  return file;
+}
+
 async function loadETData() {
   try {
-    document.getElementById('info-file').textContent = '🔍 Suche…';
-    const search = await gGet('/me/drive/root/search(q=\'ET-Liste_Tschopp\')');
-    if (!search.value || !search.value.length) { toast('Datei nicht gefunden!', 'err'); return; }
-    search.value.sort((a, b) => new Date(b.lastModifiedDateTime) - new Date(a.lastModifiedDateTime));
-    fileId = search.value[0].id;
-    document.getElementById('info-file').textContent = '📁 ' + search.value[0].name;
+    await findSharePointFile();
 
-    const range = await gGet(`/me/drive/items/${fileId}/workbook/worksheets/${ET_SHEET}/range(address='A${FIRST_ROW}:P500')`);
+    const range = await gGet(`/drives/${driveId}/items/${fileId}/workbook/worksheets/${ET_SHEET}/range(address='A${FIRST_ROW}:P500')`);
+
     etData = {};
     let count = 0;
     if (range.values) {
@@ -372,8 +419,8 @@ async function loadETData() {
           artNr: String(row[14] || ''), lz: String(row[15] || ''),
           row: i + FIRST_ROW
         };
-        etData[nrStr.replace(/-/g, '').toUpperCase()] = obj; // ET10001
-        etData[nrStr.toUpperCase()] = obj;                   // ET-10001
+        etData[nrStr.replace(/-/g, '').toUpperCase()] = obj;
+        etData[nrStr.toUpperCase()] = obj;
         count++;
       }
     }
@@ -381,9 +428,15 @@ async function loadETData() {
     document.getElementById('info-keys').textContent = Object.keys(etData).join('\n');
     toast('✅ ' + count + ' ET-Teile geladen', 'ok');
   } catch (e) {
-    console.error(e);
+    console.error('loadETData:', e);
     document.getElementById('info-file').textContent = '❌ ' + e.message;
-    toast('Fehler: ' + e.message, 'err');
+    if (e.message.includes('403')) {
+      toast('❌ Berechtigung fehlt – Admin muss Sites.ReadWrite.All genehmigen', 'err');
+    } else if (e.message.includes('404')) {
+      toast('❌ Site/Datei nicht gefunden', 'err');
+    } else {
+      toast('Fehler: ' + e.message.substring(0, 80), 'err');
+    }
   }
 }
 
@@ -428,7 +481,6 @@ function handleScan(qrData) {
       }
     }
   }
-
   if (!et) {
     for (const k of Object.keys(etData)) {
       const artNr = String(etData[k].artNr || '').toUpperCase().trim();
@@ -510,35 +562,29 @@ function updatePreview() {
 
 async function findETRow(etNr) {
   try {
-    const range = await gGet(`/me/drive/items/${fileId}/workbook/worksheets/${ET_SHEET}/range(address='A${FIRST_ROW}:A500')`);
+    const range = await gGet(`/drives/${driveId}/items/${fileId}/workbook/worksheets/${ET_SHEET}/range(address='A${FIRST_ROW}:A500')`);
     if (range.values) {
       for (let i = 0; i < range.values.length; i++) {
         const val = String(range.values[i][0] || '').trim().toUpperCase();
-        if (val === etNr.trim().toUpperCase()) {
-          return i + FIRST_ROW;
-        }
+        if (val === etNr.trim().toUpperCase()) return i + FIRST_ROW;
       }
     }
-  } catch (e) {
-    console.error('findETRow:', e);
-  }
-  return currentET.row; // Fallback auf Cache-Zeile
+  } catch (e) { console.error('findETRow:', e); }
+  return currentET.row;
 }
 
-// FIX: liveRow wird ausserhalb des try-Blocks deklariert, damit catch darauf zugreifen kann.
 async function buchen() {
   if (!currentET || !fileId) return;
   const neu = buchTyp === 'abgang' ? currentET.ist - menge : currentET.ist + menge;
   if (neu < 0) { toast('⚠️ Bestand wird negativ!', 'err'); return; }
 
-  let liveRow = currentET.row; // Vorbelegt mit Cache-Wert
-  showLoading('Wird in Excel gespeichert…');
+  let liveRow = currentET.row;
+  showLoading('Wird in SharePoint gespeichert…');
   try {
     liveRow = await findETRow(currentET.nr);
-    document.getElementById('debug-box').textContent =
-      'Schreibe ' + currentET.nr + ' in Zeile ' + liveRow + ' → Bestand: ' + neu;
+    document.getElementById('debug-box').textContent = 'Schreibe ' + currentET.nr + ' in Zeile ' + liveRow + ' → Bestand: ' + neu;
 
-    await gPatch(`/me/drive/items/${fileId}/workbook/worksheets/${ET_SHEET}/range(address='F${liveRow}')`, { values: [[neu]] });
+    await gPatch(`/drives/${driveId}/items/${fileId}/workbook/worksheets/${ET_SHEET}/range(address='F${liveRow}')`, { values: [[neu]] });
 
     const altIst = currentET.ist;
     const k = currentET.nr.replace(/-/g, '').toUpperCase();
@@ -561,11 +607,9 @@ async function buchen() {
     resetScan();
   } catch (e) {
     hideLoading();
-    console.error('buchen error:', e);
-    // liveRow ist jetzt immer definiert (entweder live oder Cache-Fallback)
-    document.getElementById('debug-box').textContent =
-      'FEHLER: ' + e.message + ' | ET: ' + currentET.nr + ' | Zeile: ' + liveRow + ' | Bestand: ' + neu;
-    toast('⚠️ Fehler: ' + e.message, 'err');
+    console.error('buchen:', e);
+    document.getElementById('debug-box').textContent = 'FEHLER: ' + e.message + ' | ET: ' + currentET.nr + ' | Zeile: ' + liveRow;
+    toast('⚠️ Fehler: ' + e.message.substring(0, 80), 'err');
   }
 }
 
