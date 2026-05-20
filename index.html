@@ -131,15 +131,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--grey);min-heig
         <div class="scan-line"></div>
         <div class="scanner-status" id="scan-status">QR-Code auf Kiste halten…</div>
       </div>
-
-      <!-- Debug box - zeigt was gescannt wurde -->
       <div class="debug-box" id="debug-box">Warte auf Scan…</div>
-
       <div class="manual-row">
         <input type="text" id="manual-et" placeholder="ET-Nr oder Art-Nr suchen" />
         <button onclick="manualSearch()">🔍</button>
       </div>
-
       <div class="card et-found hidden" id="et-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
           <div class="et-nr" id="et-nr">–</div>
@@ -154,7 +150,6 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--grey);min-heig
           <div class="stat"><div class="stat-lbl">Maximal</div><div class="stat-val" id="s-max">–</div></div>
         </div>
       </div>
-
       <div class="card hidden" id="menge-card">
         <div class="card-title">Buchungstyp</div>
         <div class="buchung-type">
@@ -195,6 +190,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--grey);min-heig
         <div style="font-size:12px;color:#888;margin-top:2px;" id="info-count">–</div>
       </div>
       <div class="card">
+        <div class="card-title">Redirect URI (aktiv)</div>
+        <div id="info-redirect" style="font-size:11px;color:#666;font-family:monospace;word-break:break-all;">–</div>
+      </div>
+      <div class="card">
         <div class="card-title">Geladene ET-Nummern</div>
         <div id="info-keys" style="font-size:11px;color:#666;font-family:monospace;line-height:1.8;">–</div>
       </div>
@@ -211,382 +210,416 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--grey);min-heig
 <div class="toast" id="toast">OK</div>
 
 <script>
-const CLIENT_ID='e3b6b827-701a-47d4-bcab-c0bc9d8569b0';
-const TENANT_ID='5ff1010c-565a-45ad-932a-b32c6606b8f7';
-const REDIRECT='https://wyssflavio-pixel.github.io/et-scanner/';
-const ET_SHEET='ET-Liste';
-const FIRST_ROW=7;
-const MAIL_TO='flavio.wyss@tschopp.swiss';
-const MAIL_CC='christopher.nagel@tschopp.swiss';
+const CLIENT_ID = 'e3b6b827-701a-47d4-bcab-c0bc9d8569b0';
+const TENANT_ID = '5ff1010c-565a-45ad-932a-b32c6606b8f7';
 
-const msalConfig={
-  auth:{clientId:CLIENT_ID,authority:'https://login.microsoftonline.com/'+TENANT_ID,redirectUri:REDIRECT},
-  cache:{cacheLocation:'localStorage',storeAuthStateInCookie:true}
+// FIX: Redirect-URI wird zur Laufzeit aus dem tatsächlichen Browser-Ort ermittelt.
+// Das verhindert Gross/Klein-Probleme: Der Browser weiss selbst, welche URL er öffnet.
+const REDIRECT = window.location.origin + window.location.pathname;
+
+const ET_SHEET = 'ET-Liste';
+const FIRST_ROW = 7;
+const MAIL_TO = 'flavio.wyss@tschopp.swiss';
+const MAIL_CC = 'christopher.nagel@tschopp.swiss';
+
+const msalConfig = {
+  auth: {
+    clientId: CLIENT_ID,
+    authority: 'https://login.microsoftonline.com/' + TENANT_ID,
+    redirectUri: REDIRECT
+  },
+  cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
 };
-const msalInst=new msal.PublicClientApplication(msalConfig);
-const SCOPES=['Files.ReadWrite','User.Read','Mail.Send'];
 
-let token='',fileId='',userEmail='',userName='';
-let currentET=null,menge=1,buchTyp='abgang';
-let etData={},bookings=[];
-let codeReader=null;
-let lastScan='',lastScanTime=0;
+const msalInst = new msal.PublicClientApplication(msalConfig);
+const SCOPES = ['Files.ReadWrite', 'User.Read', 'Mail.Send'];
 
-window.onload=async()=>{
-  try{
+let token = '', fileId = '', userEmail = '', userName = '';
+let currentET = null, menge = 1, buchTyp = 'abgang';
+let etData = {}, bookings = [];
+let codeReader = null;
+let lastScan = '', lastScanTime = 0;
+
+window.onload = async () => {
+  // Zeige aktive Redirect-URI im Info-Tab (hilft beim Debuggen)
+  document.getElementById('info-redirect').textContent = REDIRECT;
+
+  try {
     await msalInst.initialize();
-    const resp=await msalInst.handleRedirectPromise();
-    if(resp){
-      token=resp.accessToken;userEmail=resp.account.username;
-      userName=resp.account.name||userEmail.split('@')[0];
+    const resp = await msalInst.handleRedirectPromise();
+    if (resp) {
+      token = resp.accessToken;
+      userEmail = resp.account.username;
+      userName = resp.account.name || userEmail.split('@')[0];
       await afterLogin();
-    }else{
-      const accs=msalInst.getAllAccounts();
-      if(accs.length>0){
-        try{
-          const sr=await msalInst.acquireTokenSilent({scopes:SCOPES,account:accs[0]});
-          token=sr.accessToken;userEmail=accs[0].username;
-          userName=accs[0].name||userEmail.split('@')[0];
+    } else {
+      const accs = msalInst.getAllAccounts();
+      if (accs.length > 0) {
+        try {
+          const sr = await msalInst.acquireTokenSilent({ scopes: SCOPES, account: accs[0] });
+          token = sr.accessToken;
+          userEmail = accs[0].username;
+          userName = accs[0].name || userEmail.split('@')[0];
           await afterLogin();
-        }catch(e){showLogin();}
-      }else showLogin();
+        } catch (e) { showLogin(); }
+      } else { showLogin(); }
     }
-  }catch(e){console.error(e);showLogin();}
+  } catch (e) { console.error(e); showLogin(); }
 };
 
-function showLogin(){
-  document.getElementById('login-screen').style.display='flex';
-  document.getElementById('main-screen').style.display='none';
+function showLogin() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('main-screen').style.display = 'none';
 }
-async function login(){try{await msalInst.loginRedirect({scopes:SCOPES});}catch(e){toast('Fehler','err');}}
-async function forceLogout(){
-  try{
-    // Clear all MSAL cache
+
+async function login() {
+  try { await msalInst.loginRedirect({ scopes: SCOPES }); }
+  catch (e) { toast('Login-Fehler: ' + e.message, 'err'); }
+}
+
+async function forceLogout() {
+  try {
     localStorage.clear();
     sessionStorage.clear();
-    // Force logout via Microsoft
-    await msalInst.logoutRedirect({postLogoutRedirectUri: window.location.href});
-  }catch(e){
+    await msalInst.logoutRedirect({ postLogoutRedirectUri: REDIRECT });
+  } catch (e) {
     localStorage.clear();
     sessionStorage.clear();
     window.location.reload();
   }
 }
-async function logout(){if(codeReader)codeReader.reset();await msalInst.logoutRedirect();}
 
-async function afterLogin(){
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('main-screen').style.display='block';
-  document.getElementById('user-badge').style.display='flex';
-  document.getElementById('user-name').textContent=userName;
-  document.getElementById('info-email').textContent=userEmail;
+async function logout() {
+  if (codeReader) codeReader.reset();
+  await msalInst.logoutRedirect({ postLogoutRedirectUri: REDIRECT });
+}
+
+async function afterLogin() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('main-screen').style.display = 'block';
+  document.getElementById('user-badge').style.display = 'flex';
+  document.getElementById('user-name').textContent = userName;
+  document.getElementById('info-email').textContent = userEmail;
   showLoading('ET-Daten werden geladen…');
   await loadETData();
   hideLoading();
   startScanner();
 }
 
-async function refreshToken(){
-  const accs=msalInst.getAllAccounts();
-  if(accs.length>0){
-    try{const sr=await msalInst.acquireTokenSilent({scopes:SCOPES,account:accs[0]});token=sr.accessToken;}
-    catch(e){}
+async function refreshToken() {
+  const accs = msalInst.getAllAccounts();
+  if (accs.length > 0) {
+    try {
+      const sr = await msalInst.acquireTokenSilent({ scopes: SCOPES, account: accs[0] });
+      token = sr.accessToken;
+    } catch (e) { console.warn('Token-Refresh fehlgeschlagen:', e); }
   }
 }
 
-async function gGet(url){
+async function gGet(url) {
   await refreshToken();
-  const r=await fetch('https://graph.microsoft.com/v1.0'+url,{headers:{Authorization:'Bearer '+token}});
-  if(!r.ok)throw new Error('GET '+r.status);
+  const r = await fetch('https://graph.microsoft.com/v1.0' + url, { headers: { Authorization: 'Bearer ' + token } });
+  if (!r.ok) throw new Error('GET ' + r.status + ' → ' + url);
   return r.json();
 }
-async function gPatch(url,body){
+
+async function gPatch(url, body) {
   await refreshToken();
-  const r=await fetch('https://graph.microsoft.com/v1.0'+url,{
-    method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
-    body:JSON.stringify(body)
+  const r = await fetch('https://graph.microsoft.com/v1.0' + url, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
   });
-  if(!r.ok)throw new Error('PATCH '+r.status);
+  if (!r.ok) throw new Error('PATCH ' + r.status + ' → ' + url);
   return r.json();
 }
-async function gPost(url,body){
+
+async function gPost(url, body) {
   await refreshToken();
-  const r=await fetch('https://graph.microsoft.com/v1.0'+url,{
-    method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
-    body:JSON.stringify(body)
+  const r = await fetch('https://graph.microsoft.com/v1.0' + url, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
   });
   return r.status;
 }
 
-async function loadETData(){
-  try{
-    document.getElementById('info-file').textContent='🔍 Suche…';
-    const search=await gGet('/me/drive/root/search(q=\'ET-Liste_Tschopp\')');
-    if(!search.value||!search.value.length){toast('Datei nicht gefunden!','err');return;}
-    search.value.sort((a,b)=>new Date(b.lastModifiedDateTime)-new Date(a.lastModifiedDateTime));
-    fileId=search.value[0].id;
-    document.getElementById('info-file').textContent='📁 '+search.value[0].name;
+async function loadETData() {
+  try {
+    document.getElementById('info-file').textContent = '🔍 Suche…';
+    const search = await gGet('/me/drive/root/search(q=\'ET-Liste_Tschopp\')');
+    if (!search.value || !search.value.length) { toast('Datei nicht gefunden!', 'err'); return; }
+    search.value.sort((a, b) => new Date(b.lastModifiedDateTime) - new Date(a.lastModifiedDateTime));
+    fileId = search.value[0].id;
+    document.getElementById('info-file').textContent = '📁 ' + search.value[0].name;
 
-    const range=await gGet(`/me/drive/items/${fileId}/workbook/worksheets/${ET_SHEET}/range(address='A${FIRST_ROW}:P500')`);
-    etData={};
-    let count=0;
-    if(range.values){
-      for(let i=0;i<range.values.length;i++){
-        const row=range.values[i];
-        const nr=row[0];
-        if(!nr||!String(nr).toUpperCase().startsWith('ET'))continue;
-        // Store with MULTIPLE keys for robust lookup
-        const nrStr=String(nr).trim();
-        const keyNoDash=nrStr.replace(/-/g,'').toUpperCase();
-        const keyWithDash=nrStr.toUpperCase();
-        const obj={
-          nr:nrStr,anlage:String(row[1]||''),bez:String(row[2]||''),
-          lagerort:String(row[3]||''),lagerplatz:String(row[4]||''),
-          ist:parseFloat(row[5])||0,min:parseFloat(row[6])||0,max:parseFloat(row[7])||0,
-          einheit:String(row[9]||'Stk'),ekp:parseFloat(row[10])||0,
-          hersteller:String(row[12]||''),lieferant:String(row[13]||''),
-          artNr:String(row[14]||''),lz:String(row[15]||''),
-          row:i+FIRST_ROW
+    const range = await gGet(`/me/drive/items/${fileId}/workbook/worksheets/${ET_SHEET}/range(address='A${FIRST_ROW}:P500')`);
+    etData = {};
+    let count = 0;
+    if (range.values) {
+      for (let i = 0; i < range.values.length; i++) {
+        const row = range.values[i];
+        const nr = row[0];
+        if (!nr || !String(nr).toUpperCase().startsWith('ET')) continue;
+        const nrStr = String(nr).trim();
+        const obj = {
+          nr: nrStr,
+          anlage: String(row[1] || ''), bez: String(row[2] || ''),
+          lagerort: String(row[3] || ''), lagerplatz: String(row[4] || ''),
+          ist: parseFloat(row[5]) || 0, min: parseFloat(row[6]) || 0, max: parseFloat(row[7]) || 0,
+          einheit: String(row[9] || 'Stk'), ekp: parseFloat(row[10]) || 0,
+          hersteller: String(row[12] || ''), lieferant: String(row[13] || ''),
+          artNr: String(row[14] || ''), lz: String(row[15] || ''),
+          row: i + FIRST_ROW
         };
-        etData[keyNoDash]=obj;  // ET10001
-        etData[keyWithDash]=obj; // ET-10001
+        etData[nrStr.replace(/-/g, '').toUpperCase()] = obj; // ET10001
+        etData[nrStr.toUpperCase()] = obj;                   // ET-10001
         count++;
       }
     }
-    document.getElementById('info-count').textContent='✅ '+count+' ET-Teile geladen';
-    // Show all keys for debugging
-    document.getElementById('info-keys').textContent=Object.keys(etData).join('\n');
-    toast('✅ '+count+' ET-Teile geladen','ok');
-  }catch(e){
+    document.getElementById('info-count').textContent = '✅ ' + count + ' ET-Teile geladen';
+    document.getElementById('info-keys').textContent = Object.keys(etData).join('\n');
+    toast('✅ ' + count + ' ET-Teile geladen', 'ok');
+  } catch (e) {
     console.error(e);
-    document.getElementById('info-file').textContent='❌ '+e.message;
-    toast('Fehler: '+e.message,'err');
+    document.getElementById('info-file').textContent = '❌ ' + e.message;
+    toast('Fehler: ' + e.message, 'err');
   }
 }
 
-async function reloadData(){showLoading('Aktualisiere…');await loadETData();hideLoading();}
+async function reloadData() { showLoading('Aktualisiere…'); await loadETData(); hideLoading(); }
 
-function startScanner(){
-  try{
-    if(codeReader)codeReader.reset();
-    codeReader=new ZXing.BrowserMultiFormatReader();
-    codeReader.decodeFromVideoDevice(null,'qr-video',(result,err)=>{
-      if(result){
-        const text=result.getText();
-        const now=Date.now();
-        if(text===lastScan&&now-lastScanTime<3000)return;
-        lastScan=text;lastScanTime=now;
+function startScanner() {
+  try {
+    if (codeReader) codeReader.reset();
+    codeReader = new ZXing.BrowserMultiFormatReader();
+    codeReader.decodeFromVideoDevice(null, 'qr-video', (result, err) => {
+      if (result) {
+        const text = result.getText();
+        const now = Date.now();
+        if (text === lastScan && now - lastScanTime < 3000) return;
+        lastScan = text; lastScanTime = now;
         handleScan(text);
       }
     });
-    document.getElementById('scan-status').textContent='QR-Code auf Kiste halten…';
-  }catch(e){
-    document.getElementById('scan-status').textContent='⚠️ Kamera nicht verfügbar';
+    document.getElementById('scan-status').textContent = 'QR-Code auf Kiste halten…';
+  } catch (e) {
+    document.getElementById('scan-status').textContent = '⚠️ Kamera nicht verfügbar';
   }
 }
 
-function handleScan(qrData){
-  if(!qrData)return;
+function handleScan(qrData) {
+  if (!qrData) return;
+  document.getElementById('debug-box').textContent = 'Gesucht: "' + qrData + '" (' + qrData.length + ' Zeichen)';
+  const raw = qrData.trim();
+  const rawUpper = raw.toUpperCase();
+  const rawNoDash = rawUpper.replace(/-/g, '');
 
-  document.getElementById('debug-box').textContent='Gesucht: "'+qrData+'" ('+qrData.length+' Zeichen)';
+  let et = etData[rawUpper] || etData[rawNoDash];
 
-  const raw=qrData.trim();
-  const rawUpper=raw.toUpperCase();
-  const rawNoDash=rawUpper.replace(/-/g,'');
-
-  // 1. ET-Nummer direkt versuchen
-  let et=etData[rawUpper]||etData[rawNoDash];
-
-  // 2. Nur Zahlen aus ET-Nr extrahieren
-  if(!et){
-    const nums=raw.replace(/[^0-9]/g,'');
-    if(nums.length>=4){
-      et=etData['ET'+nums]||etData['ET-'+nums.slice(0,2)+'-'+nums.slice(2)];
-      if(!et){
-        for(const k of Object.keys(etData)){
-          if(k.replace(/[^0-9]/g,'')===nums){et=etData[k];break;}
+  if (!et) {
+    const nums = raw.replace(/[^0-9]/g, '');
+    if (nums.length >= 4) {
+      et = etData['ET' + nums] || etData['ET-' + nums.slice(0, 2) + '-' + nums.slice(2)];
+      if (!et) {
+        for (const k of Object.keys(etData)) {
+          if (k.replace(/[^0-9]/g, '') === nums) { et = etData[k]; break; }
         }
       }
     }
   }
 
-  // 3. ARTIKELNUMMER suchen
-  if(!et){
-    for(const k of Object.keys(etData)){
-      const e=etData[k];
-      const artNr=String(e.artNr||'').toUpperCase().trim();
-      if(!artNr)continue;
-      if(artNr===rawUpper){et=e;break;}
+  if (!et) {
+    for (const k of Object.keys(etData)) {
+      const artNr = String(etData[k].artNr || '').toUpperCase().trim();
+      if (artNr && artNr === rawUpper) { et = etData[k]; break; }
     }
-    if(!et){
-      for(const k of Object.keys(etData)){
-        const e=etData[k];
-        const artNr=String(e.artNr||'').toUpperCase().trim();
-        if(!artNr)continue;
-        if(artNr.includes(rawUpper)||rawUpper.includes(artNr)){et=e;break;}
-      }
+  }
+  if (!et) {
+    for (const k of Object.keys(etData)) {
+      const artNr = String(etData[k].artNr || '').toUpperCase().trim();
+      if (artNr && (artNr.includes(rawUpper) || rawUpper.includes(artNr))) { et = etData[k]; break; }
+    }
+  }
+  if (!et && raw.length >= 3) {
+    for (const k of Object.keys(etData)) {
+      if (String(etData[k].bez || '').toUpperCase().includes(rawUpper)) { et = etData[k]; break; }
     }
   }
 
-  // 4. BEZEICHNUNG durchsuchen
-  if(!et && raw.length>=3){
-    for(const k of Object.keys(etData)){
-      const e=etData[k];
-      const bez=String(e.bez||'').toUpperCase();
-      if(bez.includes(rawUpper)){et=e;break;}
-    }
-  }
-
-  if(!et){
-    document.getElementById('scan-status').textContent='❌ Nicht gefunden: "'+qrData+'"';
-    toast('❌ Nicht gefunden','err');
-    navigator.vibrate&&navigator.vibrate([100,50,100]);
+  if (!et) {
+    document.getElementById('scan-status').textContent = '❌ Nicht gefunden: "' + qrData + '"';
+    toast('❌ Nicht gefunden', 'err');
+    navigator.vibrate && navigator.vibrate([100, 50, 100]);
     return;
   }
 
-  navigator.vibrate&&navigator.vibrate(200);
-  if(codeReader)codeReader.reset();
-  currentET=et;menge=1;buchTyp='abgang';
-  showET(et);updatePreview();
+  navigator.vibrate && navigator.vibrate(200);
+  if (codeReader) codeReader.reset();
+  currentET = et; menge = 1; buchTyp = 'abgang';
+  showET(et); updatePreview();
 }
 
-function manualSearch(){
-  const val=document.getElementById('manual-et').value.trim();
-  if(!val)return;
+function manualSearch() {
+  const val = document.getElementById('manual-et').value.trim();
+  if (!val) return;
   handleScan(val);
-  document.getElementById('manual-et').value='';
+  document.getElementById('manual-et').value = '';
 }
 
-function showET(et){
-  document.getElementById('et-nr').textContent=et.nr;
-  document.getElementById('et-bez').textContent=et.bez;
-  document.getElementById('et-anlage').textContent=et.anlage||'–';
-  document.getElementById('et-details').innerHTML=
-    (et.hersteller?'🏭 <b>Hersteller:</b> '+et.hersteller+'<br>':'')+
-    (et.lieferant?'🚚 <b>Lieferant:</b> '+et.lieferant+'<br>':'')+
-    (et.artNr?'🔢 <b>Artikelnummer:</b> '+et.artNr+'<br>':'')+
-    '📦 <b>Lager:</b> '+(et.lagerort||'–')+' / '+(et.lagerplatz||'–');
-  document.getElementById('s-ist').textContent=et.ist;
-  document.getElementById('s-min').textContent=et.min;
-  document.getElementById('s-max').textContent=et.max;
-  let status='OK',bClass='badge-ok';
-  if(et.ist===0){status='Kritisch';bClass='badge-krit';}
-  else if(et.ist<=et.min){status='Bestellen';bClass='badge-best';}
-  document.getElementById('et-badge').textContent=status;
-  document.getElementById('et-badge').className='badge '+bClass;
-  document.getElementById('s-ist').className='stat-val '+(status==='OK'?'ok':status==='Bestellen'?'warn':'crit');
+function showET(et) {
+  document.getElementById('et-nr').textContent = et.nr;
+  document.getElementById('et-bez').textContent = et.bez;
+  document.getElementById('et-anlage').textContent = et.anlage || '–';
+  document.getElementById('et-details').innerHTML =
+    (et.hersteller ? '🏭 <b>Hersteller:</b> ' + et.hersteller + '<br>' : '') +
+    (et.lieferant ? '🚚 <b>Lieferant:</b> ' + et.lieferant + '<br>' : '') +
+    (et.artNr ? '🔢 <b>Artikelnummer:</b> ' + et.artNr + '<br>' : '') +
+    '📦 <b>Lager:</b> ' + (et.lagerort || '–') + ' / ' + (et.lagerplatz || '–');
+  document.getElementById('s-ist').textContent = et.ist;
+  document.getElementById('s-min').textContent = et.min;
+  document.getElementById('s-max').textContent = et.max;
+  let status = 'OK', bClass = 'badge-ok';
+  if (et.ist === 0) { status = 'Kritisch'; bClass = 'badge-krit'; }
+  else if (et.ist <= et.min) { status = 'Bestellen'; bClass = 'badge-best'; }
+  document.getElementById('et-badge').textContent = status;
+  document.getElementById('et-badge').className = 'badge ' + bClass;
+  document.getElementById('s-ist').className = 'stat-val ' + (status === 'OK' ? 'ok' : status === 'Bestellen' ? 'warn' : 'crit');
   document.getElementById('et-card').classList.remove('hidden');
   document.getElementById('menge-card').classList.remove('hidden');
-  document.getElementById('m-num').textContent='1';
+  document.getElementById('m-num').textContent = '1';
 }
 
-function setTyp(typ){
-  buchTyp=typ;
-  document.getElementById('btn-abgang').className='type-btn'+(typ==='abgang'?' active-abgang':'');
-  document.getElementById('btn-zugang').className='type-btn'+(typ==='zugang'?' active-zugang':'');
-  document.getElementById('btn-buchen').textContent=typ==='abgang'?'✅ Abgang buchen':'✅ Zugang buchen';
-  document.getElementById('btn-buchen').className='btn '+(typ==='abgang'?'btn-green':'btn-blue');
+function setTyp(typ) {
+  buchTyp = typ;
+  document.getElementById('btn-abgang').className = 'type-btn' + (typ === 'abgang' ? ' active-abgang' : '');
+  document.getElementById('btn-zugang').className = 'type-btn' + (typ === 'zugang' ? ' active-zugang' : '');
+  document.getElementById('btn-buchen').textContent = typ === 'abgang' ? '✅ Abgang buchen' : '✅ Zugang buchen';
+  document.getElementById('btn-buchen').className = 'btn ' + (typ === 'abgang' ? 'btn-green' : 'btn-blue');
   updatePreview();
 }
 
-function chM(d){menge=Math.max(1,menge+d);document.getElementById('m-num').textContent=menge;updatePreview();}
+function chM(d) { menge = Math.max(1, menge + d); document.getElementById('m-num').textContent = menge; updatePreview(); }
 
-function updatePreview(){
-  if(!currentET)return;
-  const neu=buchTyp==='abgang'?currentET.ist-menge:currentET.ist+menge;
-  const sign=buchTyp==='abgang'?'−':'+';
-  document.getElementById('preview-neu').innerHTML=`Bestand: ${currentET.ist} ${sign}${menge} = <strong>${Math.max(0,neu)}</strong>`;
+function updatePreview() {
+  if (!currentET) return;
+  const neu = buchTyp === 'abgang' ? currentET.ist - menge : currentET.ist + menge;
+  const sign = buchTyp === 'abgang' ? '−' : '+';
+  document.getElementById('preview-neu').innerHTML = `Bestand: ${currentET.ist} ${sign}${menge} = <strong>${Math.max(0, neu)}</strong>`;
 }
 
-async function findETRow(etNr){
-  try{
-    const range=await gGet(`/me/drive/items/${fileId}/workbook/worksheets/${ET_SHEET}/range(address='A${FIRST_ROW}:A500')`);
-    if(range.values){
-      for(let i=0;i<range.values.length;i++){
-        const val=String(range.values[i][0]||'').trim().toUpperCase();
-        if(val===etNr.trim().toUpperCase()){
-          const foundRow = i+FIRST_ROW;
-          document.getElementById('debug-box').textContent = 
-            'Schreibe ' + etNr + ' in Zeile ' + foundRow + ' → Bestand: ' + (buchTyp==='abgang'?currentET.ist-menge:currentET.ist+menge);
-          return foundRow;
+async function findETRow(etNr) {
+  try {
+    const range = await gGet(`/me/drive/items/${fileId}/workbook/worksheets/${ET_SHEET}/range(address='A${FIRST_ROW}:A500')`);
+    if (range.values) {
+      for (let i = 0; i < range.values.length; i++) {
+        const val = String(range.values[i][0] || '').trim().toUpperCase();
+        if (val === etNr.trim().toUpperCase()) {
+          return i + FIRST_ROW;
         }
       }
     }
-    document.getElementById('debug-box').textContent = 'ET ' + etNr + ' nicht in Excel gefunden! Nutze Cache-Zeile: ' + currentET.row;
-  }catch(e){
-    document.getElementById('debug-box').textContent = 'findETRow Fehler: ' + e.message;
-    console.error('findETRow:',e);
+  } catch (e) {
+    console.error('findETRow:', e);
   }
-  return currentET.row;
+  return currentET.row; // Fallback auf Cache-Zeile
 }
 
-async function buchen(){
-  if(!currentET||!fileId)return;
-  const neu=buchTyp==='abgang'?currentET.ist-menge:currentET.ist+menge;
-  if(neu<0){toast('⚠️ Bestand wird negativ!','err');return;}
+// FIX: liveRow wird ausserhalb des try-Blocks deklariert, damit catch darauf zugreifen kann.
+async function buchen() {
+  if (!currentET || !fileId) return;
+  const neu = buchTyp === 'abgang' ? currentET.ist - menge : currentET.ist + menge;
+  if (neu < 0) { toast('⚠️ Bestand wird negativ!', 'err'); return; }
+
+  let liveRow = currentET.row; // Vorbelegt mit Cache-Wert
   showLoading('Wird in Excel gespeichert…');
-  try{
-    // Find the correct row live in Excel
-    const liveRow = await findETRow(currentET.nr);
-    await gPatch(`/me/drive/items/${fileId}/workbook/worksheets/${ET_SHEET}/range(address='F${liveRow}')`,{values:[[neu]]});
-    const altIst=currentET.ist;
-    const k=currentET.nr.replace(/-/g,'').toUpperCase();
-    if(etData[k])etData[k].ist=neu;
-    currentET.ist=neu;
-    bookings.unshift({nr:currentET.nr,bez:currentET.bez,typ:buchTyp,menge,neu,altIst,
-      time:new Date().toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'}),user:userName});
-    if(buchTyp==='abgang'&&neu<=currentET.min){
+  try {
+    liveRow = await findETRow(currentET.nr);
+    document.getElementById('debug-box').textContent =
+      'Schreibe ' + currentET.nr + ' in Zeile ' + liveRow + ' → Bestand: ' + neu;
+
+    await gPatch(`/me/drive/items/${fileId}/workbook/worksheets/${ET_SHEET}/range(address='F${liveRow}')`, { values: [[neu]] });
+
+    const altIst = currentET.ist;
+    const k = currentET.nr.replace(/-/g, '').toUpperCase();
+    if (etData[k]) etData[k].ist = neu;
+    currentET.ist = neu;
+
+    bookings.unshift({
+      nr: currentET.nr, bez: currentET.bez, typ: buchTyp, menge, neu, altIst,
+      time: new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }),
+      user: userName
+    });
+
+    if (buchTyp === 'abgang' && neu <= currentET.min) {
       showLoading('Mail wird gesendet…');
-      await sendeMail(currentET,neu);
+      await sendeMail(currentET, neu);
     }
+
     hideLoading();
-    toast(`✅ ${currentET.nr} ${buchTyp==='abgang'?'−':'+'}${menge} → Bestand: ${neu}`,'ok');
+    toast(`✅ ${currentET.nr} ${buchTyp === 'abgang' ? '−' : '+'}${menge} → Bestand: ${neu}`, 'ok');
     resetScan();
-  }catch(e){
+  } catch (e) {
     hideLoading();
     console.error('buchen error:', e);
-    toast('⚠️ Fehler: '+e.message+' (Zeile '+liveRow+')','err');
-    // Show detailed error
-    document.getElementById('debug-box').textContent = 
+    // liveRow ist jetzt immer definiert (entweder live oder Cache-Fallback)
+    document.getElementById('debug-box').textContent =
       'FEHLER: ' + e.message + ' | ET: ' + currentET.nr + ' | Zeile: ' + liveRow + ' | Bestand: ' + neu;
+    toast('⚠️ Fehler: ' + e.message, 'err');
   }
 }
 
-async function sendeMail(et,neuerIst){
-  const bm=et.max-neuerIst;
-  const datum=new Date().toLocaleString('de-CH',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  const html=`<div style="font-family:Arial,sans-serif;max-width:600px;"><div style="background:#1A5C1A;color:#fff;padding:20px;border-radius:8px 8px 0 0;"><h2 style="margin:0;">⚠️ Meldebestand erreicht</h2><p style="margin:4px 0 0;opacity:.8;font-size:13px;">Tschopp Holzindustrie AG</p></div><div style="background:#fff;border:1px solid #ddd;border-top:none;padding:20px;border-radius:0 0 8px 8px;"><table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;"><tr style="background:#f5f5f5;"><td style="padding:8px 12px;font-weight:bold;width:45%;">ET-Nummer</td><td style="padding:8px 12px;">${et.nr}</td></tr><tr><td style="padding:8px 12px;font-weight:bold;">Bezeichnung</td><td style="padding:8px 12px;">${et.bez}</td></tr><tr style="background:#f5f5f5;"><td style="padding:8px 12px;font-weight:bold;">Anlage</td><td style="padding:8px 12px;">${et.anlage||'–'}</td></tr><tr><td style="padding:8px 12px;font-weight:bold;">Lagerort</td><td style="padding:8px 12px;">${et.lagerort||'–'} / ${et.lagerplatz||'–'}</td></tr><tr style="background:#f5f5f5;"><td style="padding:8px 12px;font-weight:bold;">Hersteller</td><td style="padding:8px 12px;">${et.hersteller||'–'}</td></tr></table><div style="background:#FFF3CD;border:1px solid #FFCA28;border-radius:8px;padding:16px;margin-bottom:16px;"><table style="width:100%;font-size:14px;border-collapse:collapse;"><tr><td style="padding:4px 0;font-weight:bold;">Bestand Ist</td><td style="color:#E53935;font-weight:bold;font-size:20px;">${neuerIst} ${et.einheit}</td></tr><tr><td style="padding:4px 0;font-weight:bold;">Mindestbestand</td><td>${et.min} ${et.einheit}</td></tr><tr><td style="padding:4px 0;font-weight:bold;">Maximalbestand</td><td>${et.max} ${et.einheit}</td></tr></table></div><div style="background:#1A5C1A;color:#fff;border-radius:8px;padding:16px;margin-bottom:16px;text-align:center;"><div style="font-size:12px;opacity:.8;margin-bottom:4px;">BESTELLMENGE</div><div style="font-size:36px;font-weight:bold;">${bm} ${et.einheit}</div></div><table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;"><tr style="background:#f5f5f5;"><td style="padding:8px 12px;font-weight:bold;width:45%;">Lieferant</td><td style="padding:8px 12px;">${et.lieferant||'–'}</td></tr><tr><td style="padding:8px 12px;font-weight:bold;">Artikelnummer</td><td style="padding:8px 12px;">${et.artNr||'–'}</td></tr><tr style="background:#f5f5f5;"><td style="padding:8px 12px;font-weight:bold;">Lieferzeit</td><td style="padding:8px 12px;">${et.lz||'–'} Tage</td></tr><tr><td style="padding:8px 12px;font-weight:bold;">Einkaufspreis</td><td style="padding:8px 12px;">CHF ${et.ekp?et.ekp.toFixed(2):'–'}</td></tr></table><div style="border-top:1px solid #eee;padding-top:12px;font-size:12px;color:#888;">📱 ET-Scanner App &nbsp;|&nbsp; 👤 ${userName} &nbsp;|&nbsp; 📅 ${datum}</div></div></div>`;
-  const payload={message:{subject:'⚠️ MELDEBESTAND: '+et.nr+' – '+et.bez,body:{contentType:'HTML',content:html},toRecipients:[{emailAddress:{address:MAIL_TO}}],ccRecipients:[{emailAddress:{address:MAIL_CC}}]},saveToSentItems:true};
-  try{const s=await gPost('/me/sendMail',payload);if(s===202)toast('📧 Mail gesendet!','info');}catch(e){console.error(e);}
+async function sendeMail(et, neuerIst) {
+  const bm = et.max - neuerIst;
+  const datum = new Date().toLocaleString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const html = `<div style="font-family:Arial,sans-serif;max-width:600px;"><div style="background:#1A5C1A;color:#fff;padding:20px;border-radius:8px 8px 0 0;"><h2 style="margin:0;">⚠️ Meldebestand erreicht</h2><p style="margin:4px 0 0;opacity:.8;font-size:13px;">Tschopp Holzindustrie AG</p></div><div style="background:#fff;border:1px solid #ddd;border-top:none;padding:20px;border-radius:0 0 8px 8px;"><table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;"><tr style="background:#f5f5f5;"><td style="padding:8px 12px;font-weight:bold;width:45%;">ET-Nummer</td><td style="padding:8px 12px;">${et.nr}</td></tr><tr><td style="padding:8px 12px;font-weight:bold;">Bezeichnung</td><td style="padding:8px 12px;">${et.bez}</td></tr><tr style="background:#f5f5f5;"><td style="padding:8px 12px;font-weight:bold;">Anlage</td><td style="padding:8px 12px;">${et.anlage || '–'}</td></tr><tr><td style="padding:8px 12px;font-weight:bold;">Lagerort</td><td style="padding:8px 12px;">${et.lagerort || '–'} / ${et.lagerplatz || '–'}</td></tr><tr style="background:#f5f5f5;"><td style="padding:8px 12px;font-weight:bold;">Hersteller</td><td style="padding:8px 12px;">${et.hersteller || '–'}</td></tr></table><div style="background:#FFF3CD;border:1px solid #FFCA28;border-radius:8px;padding:16px;margin-bottom:16px;"><table style="width:100%;font-size:14px;border-collapse:collapse;"><tr><td style="padding:4px 0;font-weight:bold;">Bestand Ist</td><td style="color:#E53935;font-weight:bold;font-size:20px;">${neuerIst} ${et.einheit}</td></tr><tr><td style="padding:4px 0;font-weight:bold;">Mindestbestand</td><td>${et.min} ${et.einheit}</td></tr><tr><td style="padding:4px 0;font-weight:bold;">Maximalbestand</td><td>${et.max} ${et.einheit}</td></tr></table></div><div style="background:#1A5C1A;color:#fff;border-radius:8px;padding:16px;margin-bottom:16px;text-align:center;"><div style="font-size:12px;opacity:.8;margin-bottom:4px;">BESTELLMENGE</div><div style="font-size:36px;font-weight:bold;">${bm} ${et.einheit}</div></div><table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;"><tr style="background:#f5f5f5;"><td style="padding:8px 12px;font-weight:bold;width:45%;">Lieferant</td><td style="padding:8px 12px;">${et.lieferant || '–'}</td></tr><tr><td style="padding:8px 12px;font-weight:bold;">Artikelnummer</td><td style="padding:8px 12px;">${et.artNr || '–'}</td></tr><tr style="background:#f5f5f5;"><td style="padding:8px 12px;font-weight:bold;">Lieferzeit</td><td style="padding:8px 12px;">${et.lz || '–'} Tage</td></tr><tr><td style="padding:8px 12px;font-weight:bold;">Einkaufspreis</td><td style="padding:8px 12px;">CHF ${et.ekp ? et.ekp.toFixed(2) : '–'}</td></tr></table><div style="border-top:1px solid #eee;padding-top:12px;font-size:12px;color:#888;">📱 ET-Scanner App &nbsp;|&nbsp; 👤 ${userName} &nbsp;|&nbsp; 📅 ${datum}</div></div></div>`;
+  const payload = {
+    message: {
+      subject: '⚠️ MELDEBESTAND: ' + et.nr + ' – ' + et.bez,
+      body: { contentType: 'HTML', content: html },
+      toRecipients: [{ emailAddress: { address: MAIL_TO } }],
+      ccRecipients: [{ emailAddress: { address: MAIL_CC } }]
+    },
+    saveToSentItems: true
+  };
+  try {
+    const s = await gPost('/me/sendMail', payload);
+    if (s === 202) toast('📧 Mail gesendet!', 'info');
+  } catch (e) { console.error('sendeMail:', e); }
 }
 
-function resetScan(){
-  currentET=null;menge=1;buchTyp='abgang';
+function resetScan() {
+  currentET = null; menge = 1; buchTyp = 'abgang';
   document.getElementById('et-card').classList.add('hidden');
   document.getElementById('menge-card').classList.add('hidden');
-  document.getElementById('debug-box').textContent='Warte auf Scan…';
+  document.getElementById('debug-box').textContent = 'Warte auf Scan…';
   setTyp('abgang');
   startScanner();
 }
 
-function goTab(t){
-  ['scan','hist','info'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('hidden',x!==t));
-  document.querySelectorAll('.tab').forEach((b,i)=>b.classList.toggle('on',['scan','hist','info'][i]===t));
-  if(t==='hist')renderHist();
+function goTab(t) {
+  ['scan', 'hist', 'info'].forEach(x => document.getElementById('tab-' + x).classList.toggle('hidden', x !== t));
+  document.querySelectorAll('.tab').forEach((b, i) => b.classList.toggle('on', ['scan', 'hist', 'info'][i] === t));
+  if (t === 'hist') renderHist();
 }
 
-function renderHist(){
-  const el=document.getElementById('hist-list');
-  if(!bookings.length){el.innerHTML='<div style="text-align:center;padding:30px;color:#ccc;font-size:14px;">Noch keine Buchungen</div>';return;}
-  el.innerHTML=bookings.map(b=>`<div class="hist-item"><div><div class="hist-nr">${b.nr} <span style="font-size:11px;color:#aaa">${b.typ==='abgang'?'Abgang':'Zugang'}</span></div><div class="hist-bez">${b.bez}</div><div class="hist-time">🕐 ${b.time} · ${b.altIst}→${b.neu} · ${b.user}</div></div><div class="hist-amt ${b.typ}">${b.typ==='abgang'?'−':'+'}${b.menge}</div></div>`).join('');
+function renderHist() {
+  const el = document.getElementById('hist-list');
+  if (!bookings.length) { el.innerHTML = '<div style="text-align:center;padding:30px;color:#ccc;font-size:14px;">Noch keine Buchungen</div>'; return; }
+  el.innerHTML = bookings.map(b =>
+    `<div class="hist-item"><div><div class="hist-nr">${b.nr} <span style="font-size:11px;color:#aaa">${b.typ === 'abgang' ? 'Abgang' : 'Zugang'}</span></div><div class="hist-bez">${b.bez}</div><div class="hist-time">🕐 ${b.time} · ${b.altIst}→${b.neu} · ${b.user}</div></div><div class="hist-amt ${b.typ}">${b.typ === 'abgang' ? '−' : '+'}${b.menge}</div></div>`
+  ).join('');
 }
 
-function showLoading(txt){document.getElementById('loading-text').textContent=txt||'Laden…';document.getElementById('loading').classList.remove('hidden');}
-function hideLoading(){document.getElementById('loading').classList.add('hidden');}
-function toast(msg,type=''){
-  const el=document.getElementById('toast');el.textContent=msg;
-  el.className='toast '+(type==='ok'?'ok':type==='err'?'err':type==='info'?'info':'');
-  el.classList.add('show');setTimeout(()=>el.classList.remove('show'),3500);
+function showLoading(txt) { document.getElementById('loading-text').textContent = txt || 'Laden…'; document.getElementById('loading').classList.remove('hidden'); }
+function hideLoading() { document.getElementById('loading').classList.add('hidden'); }
+
+function toast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast ' + (type === 'ok' ? 'ok' : type === 'err' ? 'err' : type === 'info' ? 'info' : '');
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3500);
 }
 </script>
 </body>
