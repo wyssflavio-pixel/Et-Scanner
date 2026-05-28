@@ -27,23 +27,66 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--grey);min-heig
 .hidden{display:none!important;}
 .card{background:#fff;border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:var(--shadow);}
 .card-title{font-size:12px;font-weight:700;color:var(--g1);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
-.scanner-wrap{position:relative;border-radius:16px;overflow:hidden;background:#000;margin-bottom:12px;}
-#qr-video{width:100%;height:260px;object-fit:cover;display:block;}
-.sf-corner{position:absolute;width:30px;height:30px;border-color:var(--g3);border-style:solid;}
-.sf-tl{top:30px;left:30px;border-width:4px 0 0 4px;border-radius:4px 0 0 0;}
-.sf-tr{top:30px;right:30px;border-width:4px 4px 0 0;border-radius:0 4px 0 0;}
-.sf-bl{bottom:30px;left:30px;border-width:0 0 4px 4px;border-radius:0 0 0 4px;}
-.sf-br{bottom:30px;right:30px;border-width:0 4px 4px 0;border-radius:0 0 4px 0;}
-.scan-line{position:absolute;left:30px;right:30px;height:2px;background:linear-gradient(90deg,transparent,var(--g3),transparent);animation:sl 2s ease-in-out infinite;top:50%;}
-@keyframes sl{0%,100%{transform:translateY(-100px)}50%{transform:translateY(100px)}}
-.scanner-status{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.65);color:#fff;text-align:center;padding:10px;font-size:13px;font-weight:500;}
-.debug-box{background:#1a1a1a;color:#00ff00;font-family:monospace;font-size:11px;padding:8px 12px;border-radius:8px;margin-bottom:10px;word-break:break-all;min-height:24px;}
+
+/* ===== SCANNER ===== */
+.scanner-wrap{position:relative;border-radius:16px;overflow:hidden;background:#000;margin-bottom:8px;}
+#qr-video{width:100%;height:280px;object-fit:cover;display:block;}
+
+/* Zielrahmen - zeigt genau die Scan-Zone */
+.scan-zone{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:180px;height:180px;pointer-events:none;}
+.scan-zone-inner{position:relative;width:100%;height:100%;}
+.sz-corner{position:absolute;width:24px;height:24px;border-color:#fff;border-style:solid;}
+.sz-tl{top:0;left:0;border-width:3px 0 0 3px;border-radius:3px 0 0 0;}
+.sz-tr{top:0;right:0;border-width:3px 3px 0 0;border-radius:0 3px 0 0;}
+.sz-bl{bottom:0;left:0;border-width:0 0 3px 3px;border-radius:0 0 0 3px;}
+.sz-br{bottom:0;right:0;border-width:0 3px 3px 0;border-radius:0 0 3px 0;}
+
+/* Scan-Linie nur wenn aktiv */
+.scan-line{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--g3),transparent);top:50%;display:none;}
+.scan-line.active{display:block;animation:sl 1.5s ease-in-out infinite;}
+@keyframes sl{0%,100%{transform:translateY(-80px)}50%{transform:translateY(80px)}}
+
+/* Bestätigungs-Ring */
+.confirm-ring{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:80px;height:80px;border-radius:50%;border:3px solid var(--g3);display:none;animation:pulse 0.5s ease-out;}
+@keyframes pulse{0%{opacity:1;transform:translate(-50%,-50%) scale(0.5)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.5)}}
+
+/* Status-Bar unten im Scanner */
+.scanner-status{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);color:#fff;text-align:center;padding:10px 14px;font-size:13px;font-weight:500;}
+.scanner-status.detecting{background:rgba(230,81,0,.85);}
+.scanner-status.confirmed{background:rgba(26,92,26,.9);}
+
+/* Fortschritts-Bar bei Bestätigung */
+.progress-bar{position:absolute;bottom:0;left:0;height:3px;background:var(--g3);width:0;transition:width linear;}
+
+/* Scan-Modus Toggle */
+.scan-mode-row{display:flex;gap:8px;margin-bottom:10px;}
+.mode-btn{flex:1;padding:10px 6px;border:2px solid #e0e0e0;border-radius:10px;background:#fff;font-size:12px;font-weight:600;color:#888;cursor:pointer;text-align:center;transition:all .2s;}
+.mode-btn.active{border-color:var(--g1);background:var(--gl);color:var(--g1);}
+.mode-icon{font-size:20px;display:block;margin-bottom:3px;}
+
+/* Manueller Auslöse-Button */
+.capture-btn{width:100%;padding:16px;background:var(--g1);color:#fff;border:none;border-radius:12px;font-size:17px;font-weight:700;cursor:pointer;margin-bottom:10px;display:none;}
+.capture-btn:active{transform:scale(.97);}
+
+/* Zoom-Slider */
+.zoom-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:10px 14px;background:#f8f8f8;border-radius:10px;}
+.zoom-lbl{font-size:12px;color:#888;font-weight:600;min-width:50px;}
+#zoom-slider{flex:1;height:4px;accent-color:var(--g1);}
+.zoom-val{font-size:12px;font-weight:700;color:var(--g1);min-width:32px;text-align:right;}
+
+/* Erkannter Code Vorschau */
+.detected-preview{background:#1a1a1a;color:#00ff00;font-family:monospace;font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:10px;word-break:break-all;min-height:28px;display:flex;align-items:center;gap:8px;}
+.detected-dot{width:8px;height:8px;border-radius:50%;background:#888;flex-shrink:0;}
+.detected-dot.active{background:#00ff00;animation:blink .5s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+
 .btn{width:100%;padding:15px;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;transition:all .15s;}
 .btn:active{transform:scale(.97);}
 .btn-green{background:var(--g1);color:#fff;}
 .btn-blue{background:var(--blue);color:#fff;}
 .btn-light{background:var(--gl);color:var(--g1);margin-top:8px;}
 .btn-red{background:var(--red);color:#fff;}
+
 .et-found{border-left:5px solid var(--g1);}
 .et-nr{font-size:22px;font-weight:800;color:var(--g1);}
 .et-bez{font-size:15px;font-weight:600;margin-top:2px;}
@@ -122,20 +165,62 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--grey);min-heig
     </div>
 
     <div id="tab-scan">
+      <!-- SCAN-MODUS -->
+      <div class="scan-mode-row">
+        <button class="mode-btn active" id="mode-auto" onclick="setScanMode('auto')">
+          <span class="mode-icon">🤖</span>Automatisch
+        </button>
+        <button class="mode-btn" id="mode-manual" onclick="setScanMode('manual')">
+          <span class="mode-icon">👆</span>Manuell
+        </button>
+        <button class="mode-btn" id="mode-stable" onclick="setScanMode('stable')">
+          <span class="mode-icon">🎯</span>Stabil (1s)
+        </button>
+      </div>
+
+      <!-- SCANNER -->
       <div class="scanner-wrap">
         <video id="qr-video" autoplay playsinline muted></video>
-        <div class="sf-corner sf-tl"></div>
-        <div class="sf-corner sf-tr"></div>
-        <div class="sf-corner sf-bl"></div>
-        <div class="sf-corner sf-br"></div>
-        <div class="scan-line"></div>
-        <div class="scanner-status" id="scan-status">QR-Code auf Kiste halten…</div>
+        <!-- Zielrahmen -->
+        <div class="scan-zone">
+          <div class="scan-zone-inner">
+            <div class="sz-corner sz-tl"></div>
+            <div class="sz-corner sz-tr"></div>
+            <div class="sz-corner sz-bl"></div>
+            <div class="sz-corner sz-br"></div>
+            <div class="scan-line" id="scan-line"></div>
+          </div>
+        </div>
+        <div class="confirm-ring" id="confirm-ring"></div>
+        <div class="progress-bar" id="progress-bar"></div>
+        <div class="scanner-status" id="scan-status">Halte QR-Code in den Rahmen…</div>
       </div>
-      <div class="debug-box" id="debug-box">Warte auf Scan…</div>
+
+      <!-- ZOOM -->
+      <div class="zoom-row">
+        <span class="zoom-lbl">🔍 Zoom</span>
+        <input type="range" id="zoom-slider" min="1" max="4" step="0.5" value="1" oninput="setZoom(this.value)">
+        <span class="zoom-val" id="zoom-val">1×</span>
+      </div>
+
+      <!-- Erkannter Code Vorschau -->
+      <div class="detected-preview">
+        <div class="detected-dot" id="detected-dot"></div>
+        <span id="detected-text">Warte auf Scan…</span>
+      </div>
+
+      <!-- Manueller Auslöser -->
+      <button class="capture-btn" id="capture-btn" onclick="confirmScan()">
+        📸 Diesen Code übernehmen
+      </button>
+
+      <!-- Manuelle Eingabe -->
       <div class="manual-row">
-        <input type="text" id="manual-et" placeholder="ET-Nr oder Art-Nr suchen" />
+        <input type="text" id="manual-et" placeholder="ET-Nr manuell eingeben" />
         <button onclick="manualSearch()">🔍</button>
       </div>
+
+      <!-- ET-Karte -->
       <div class="card et-found hidden" id="et-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
           <div class="et-nr" id="et-nr">–</div>
@@ -150,6 +235,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--grey);min-heig
           <div class="stat"><div class="stat-lbl">Maximal</div><div class="stat-val" id="s-max">–</div></div>
         </div>
       </div>
+
+      <!-- Buchung -->
       <div class="card hidden" id="menge-card">
         <div class="card-title">Buchungstyp</div>
         <div class="buchung-type">
@@ -190,15 +277,16 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--grey);min-heig
         <div style="font-size:12px;color:#888;margin-top:2px;" id="info-count">–</div>
       </div>
       <div class="card">
-        <div class="card-title">SharePoint</div>
-        <div style="font-size:11px;color:#666;font-family:monospace;word-break:break-all;">
-          Site: tschoppag.sharepoint.com/sites/Instandhaltung<br>
-          Ordner: /ET-Liste/
+        <div class="card-title">Scan-Einstellungen</div>
+        <div style="font-size:13px;color:#555;line-height:2;">
+          🤖 <b>Automatisch</b> – sofort bei Erkennung<br>
+          🎯 <b>Stabil (1s)</b> – Code muss 1 Sek. stabil sein<br>
+          👆 <b>Manuell</b> – du drückst den Auslöser selbst
         </div>
       </div>
       <div class="card">
-        <div class="card-title">Redirect URI (aktiv)</div>
-        <div id="info-redirect" style="font-size:11px;color:#666;font-family:monospace;word-break:break-all;">–</div>
+        <div class="card-title">SharePoint</div>
+        <div style="font-size:11px;color:#666;font-family:monospace;word-break:break-all;" id="info-redirect">–</div>
       </div>
       <div class="card">
         <div class="card-title">Geladene ET-Nummern</div>
@@ -217,38 +305,23 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--grey);min-heig
 <div class="toast" id="toast">OK</div>
 
 <script>
-// ===== KONFIGURATION =====
 const CLIENT_ID = 'e3b6b827-701a-47d4-bcab-c0bc9d8569b0';
 const TENANT_ID = '5ff1010c-565a-45ad-932a-b32c6606b8f7';
-
-// SharePoint Konfiguration
 const SP_HOSTNAME = 'tschoppag.sharepoint.com';
 const SP_SITE_PATH = '/sites/Instandhaltung';
-const SP_FOLDER_PATH = '/ET-Liste'; // Unter "Freigegebene Dokumente"
+const SP_FOLDER_PATH = '/ET-Liste';
 const SP_FILENAME = 'ET-Liste_Tschopp_Final V2.xlsm';
-
-// Excel Konfiguration
 const ET_SHEET = 'ET-Liste';
 const FIRST_ROW = 7;
-
-// Mail
 const MAIL_TO = 'flavio.wyss@tschopp.swiss';
 const MAIL_CC = 'christopher.nagel@tschopp.swiss';
-
-// Dynamische Redirect-URI
 const REDIRECT = window.location.origin + window.location.pathname;
 
 const msalConfig = {
-  auth: {
-    clientId: CLIENT_ID,
-    authority: 'https://login.microsoftonline.com/' + TENANT_ID,
-    redirectUri: REDIRECT
-  },
+  auth: { clientId: CLIENT_ID, authority: 'https://login.microsoftonline.com/' + TENANT_ID, redirectUri: REDIRECT },
   cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
 };
-
 const msalInst = new msal.PublicClientApplication(msalConfig);
-// WICHTIG: Sites.ReadWrite.All für SharePoint
 const SCOPES = ['Files.ReadWrite', 'Sites.ReadWrite.All', 'User.Read', 'Mail.Send'];
 
 let token = '', siteId = '', driveId = '', fileId = '';
@@ -256,11 +329,76 @@ let userEmail = '', userName = '';
 let currentET = null, menge = 1, buchTyp = 'abgang';
 let etData = {}, bookings = [];
 let codeReader = null;
-let lastScan = '', lastScanTime = 0;
+let videoTrack = null;
 
+// ===== SCAN-MODUS =====
+// auto = sofort bei Erkennung
+// stable = muss 1 Sek. stabil sein
+// manual = Benutzer drückt selbst den Button
+let scanMode = 'auto';
+let lastDetectedCode = '';
+let lastDetectedTime = 0;
+let stableTimer = null;
+let pendingCode = '';
+const STABLE_DELAY = 1000; // 1 Sekunde
+
+function setScanMode(mode) {
+  scanMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('mode-' + mode).classList.add('active');
+
+  const captureBtn = document.getElementById('capture-btn');
+  const scanLine = document.getElementById('scan-line');
+
+  if (mode === 'manual') {
+    captureBtn.style.display = 'block';
+    scanLine.classList.remove('active');
+  } else if (mode === 'stable') {
+    captureBtn.style.display = 'none';
+    scanLine.classList.add('active');
+  } else {
+    captureBtn.style.display = 'none';
+    scanLine.classList.remove('active');
+  }
+
+  // Reset
+  pendingCode = '';
+  clearStableTimer();
+  updateDetectedPreview('', false);
+  document.getElementById('progress-bar').style.width = '0';
+}
+
+function clearStableTimer() {
+  if (stableTimer) { clearTimeout(stableTimer); stableTimer = null; }
+}
+
+function updateDetectedPreview(code, active) {
+  document.getElementById('detected-text').textContent = code || 'Warte auf Scan…';
+  document.getElementById('detected-dot').className = 'detected-dot' + (active ? ' active' : '');
+}
+
+function confirmScan() {
+  if (pendingCode) {
+    processCode(pendingCode);
+  }
+}
+
+// ===== ZOOM =====
+function setZoom(val) {
+  document.getElementById('zoom-val').textContent = val + '×';
+  if (videoTrack && videoTrack.getCapabilities) {
+    try {
+      const caps = videoTrack.getCapabilities();
+      if (caps.zoom) {
+        videoTrack.applyConstraints({ advanced: [{ zoom: parseFloat(val) }] });
+      }
+    } catch(e) { console.warn('Zoom nicht unterstützt:', e); }
+  }
+}
+
+// ===== AUTH =====
 window.onload = async () => {
   document.getElementById('info-redirect').textContent = REDIRECT;
-
   try {
     await msalInst.initialize();
     const resp = await msalInst.handleRedirectPromise();
@@ -281,7 +419,7 @@ window.onload = async () => {
         } catch (e) { showLogin(); }
       } else { showLogin(); }
     }
-  } catch (e) { console.error(e); showLogin(); }
+  } catch (e) { showLogin(); }
 };
 
 function showLogin() {
@@ -295,15 +433,9 @@ async function login() {
 }
 
 async function forceLogout() {
-  try {
-    localStorage.clear();
-    sessionStorage.clear();
-    await msalInst.logoutRedirect({ postLogoutRedirectUri: REDIRECT });
-  } catch (e) {
-    localStorage.clear();
-    sessionStorage.clear();
-    window.location.reload();
-  }
+  localStorage.clear(); sessionStorage.clear();
+  try { await msalInst.logoutRedirect({ postLogoutRedirectUri: REDIRECT }); }
+  catch (e) { window.location.reload(); }
 }
 
 async function logout() {
@@ -329,78 +461,52 @@ async function refreshToken() {
     try {
       const sr = await msalInst.acquireTokenSilent({ scopes: SCOPES, account: accs[0] });
       token = sr.accessToken;
-    } catch (e) { console.warn('Token-Refresh:', e); }
+    } catch (e) {}
   }
 }
 
 async function gGet(url) {
   await refreshToken();
   const r = await fetch('https://graph.microsoft.com/v1.0' + url, { headers: { Authorization: 'Bearer ' + token } });
-  if (!r.ok) {
-    const txt = await r.text();
-    throw new Error('GET ' + r.status + ' → ' + url + ' | ' + txt.substring(0, 200));
-  }
+  if (!r.ok) { const t = await r.text(); throw new Error('GET ' + r.status + ' | ' + t.substring(0, 150)); }
   return r.json();
 }
 
 async function gPatch(url, body) {
   await refreshToken();
   const r = await fetch('https://graph.microsoft.com/v1.0' + url, {
-    method: 'PATCH',
-    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
-  if (!r.ok) {
-    const txt = await r.text();
-    throw new Error('PATCH ' + r.status + ' | ' + txt.substring(0, 200));
-  }
+  if (!r.ok) { const t = await r.text(); throw new Error('PATCH ' + r.status + ' | ' + t.substring(0, 150)); }
   return r.json();
 }
 
 async function gPost(url, body) {
   await refreshToken();
   const r = await fetch('https://graph.microsoft.com/v1.0' + url, {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
   return r.status;
 }
 
-// ===== SHAREPOINT: Site → Drive → File =====
-async function findSharePointFile() {
-  document.getElementById('info-file').textContent = '🔍 Suche SharePoint-Site…';
-  const site = await gGet(`/sites/${SP_HOSTNAME}:${SP_SITE_PATH}`);
-  siteId = site.id;
-
-  document.getElementById('info-file').textContent = '🔍 Suche Dokumentenbibliothek…';
-  const drive = await gGet(`/sites/${siteId}/drive`);
-  driveId = drive.id;
-
-  document.getElementById('info-file').textContent = '🔍 Suche Datei in ' + SP_FOLDER_PATH + '…';
-  const items = await gGet(`/drives/${driveId}/root:${SP_FOLDER_PATH}:/children`);
-
-  if (!items.value || !items.value.length) {
-    throw new Error('Ordner ' + SP_FOLDER_PATH + ' ist leer');
-  }
-
-  let file = items.value.find(it => it.name && it.name.toLowerCase() === SP_FILENAME.toLowerCase());
-  if (!file) {
-    file = items.value.find(it => it.name && it.name.toLowerCase().endsWith('.xlsm'));
-    if (!file) throw new Error('Keine .xlsm Datei im Ordner');
-  }
-
-  fileId = file.id;
-  document.getElementById('info-file').textContent = '📁 ' + file.name + ' (SharePoint)';
-  return file;
-}
-
 async function loadETData() {
   try {
-    await findSharePointFile();
-
-    const range = await gGet(`/drives/${driveId}/items/${fileId}/workbook/worksheets/${ET_SHEET}/range(address='A${FIRST_ROW}:P500')`);
-
+    document.getElementById('info-file').textContent = '🔍 Suche SharePoint-Site…';
+    const site = await gGet('/sites/' + SP_HOSTNAME + ':' + SP_SITE_PATH);
+    siteId = site.id;
+    const drive = await gGet('/sites/' + siteId + '/drive');
+    driveId = drive.id;
+    document.getElementById('info-file').textContent = '🔍 Suche Datei…';
+    const items = await gGet('/drives/' + driveId + '/root:' + SP_FOLDER_PATH + ':/children');
+    if (!items.value || !items.value.length) throw new Error('Ordner leer');
+    let file = items.value.find(it => it.name && it.name.toLowerCase() === SP_FILENAME.toLowerCase());
+    if (!file) file = items.value.find(it => it.name && it.name.toLowerCase().endsWith('.xlsm'));
+    if (!file) throw new Error('Keine .xlsm Datei');
+    fileId = file.id;
+    document.getElementById('info-file').textContent = '📁 ' + file.name;
+    const range = await gGet('/drives/' + driveId + '/items/' + fileId + '/workbook/worksheets/' + ET_SHEET + '/range(address=\'A' + FIRST_ROW + ':P500\')');
     etData = {};
     let count = 0;
     if (range.values) {
@@ -410,112 +516,166 @@ async function loadETData() {
         if (!nr || !String(nr).toUpperCase().startsWith('ET')) continue;
         const nrStr = String(nr).trim();
         const obj = {
-          nr: nrStr,
-          anlage: String(row[1] || ''), bez: String(row[2] || ''),
-          lagerort: String(row[3] || ''), lagerplatz: String(row[4] || ''),
-          ist: parseFloat(row[5]) || 0, min: parseFloat(row[6]) || 0, max: parseFloat(row[7]) || 0,
-          einheit: String(row[9] || 'Stk'), ekp: parseFloat(row[10]) || 0,
-          hersteller: String(row[12] || ''), lieferant: String(row[13] || ''),
-          artNr: String(row[14] || ''), lz: String(row[15] || ''),
-          row: i + FIRST_ROW
+          nr: nrStr, anlage: String(row[1]||''), bez: String(row[2]||''),
+          lagerort: String(row[3]||''), lagerplatz: String(row[4]||''),
+          ist: parseFloat(row[5])||0, min: parseFloat(row[6])||0, max: parseFloat(row[7])||0,
+          einheit: String(row[9]||'Stk'), ekp: parseFloat(row[10])||0,
+          hersteller: String(row[12]||''), lieferant: String(row[13]||''),
+          artNr: String(row[14]||''), lz: String(row[15]||''), row: i + FIRST_ROW
         };
-        etData[nrStr.replace(/-/g, '').toUpperCase()] = obj;
+        etData[nrStr.replace(/-/g,'').toUpperCase()] = obj;
         etData[nrStr.toUpperCase()] = obj;
         count++;
       }
     }
     document.getElementById('info-count').textContent = '✅ ' + count + ' ET-Teile geladen';
-    document.getElementById('info-keys').textContent = Object.keys(etData).join('\n');
+    document.getElementById('info-keys').textContent = Object.keys(etData).filter(k=>k.includes('-')).join('\n');
     toast('✅ ' + count + ' ET-Teile geladen', 'ok');
   } catch (e) {
-    console.error('loadETData:', e);
     document.getElementById('info-file').textContent = '❌ ' + e.message;
-    if (e.message.includes('403')) {
-      toast('❌ Berechtigung fehlt – Admin muss Sites.ReadWrite.All genehmigen', 'err');
-    } else if (e.message.includes('404')) {
-      toast('❌ Site/Datei nicht gefunden', 'err');
-    } else {
-      toast('Fehler: ' + e.message.substring(0, 80), 'err');
-    }
+    toast('Fehler: ' + e.message.substring(0,80), 'err');
   }
 }
 
 async function reloadData() { showLoading('Aktualisiere…'); await loadETData(); hideLoading(); }
 
+// ===== SCANNER =====
 function startScanner() {
   try {
     if (codeReader) codeReader.reset();
     codeReader = new ZXing.BrowserMultiFormatReader();
-    codeReader.decodeFromVideoDevice(null, 'qr-video', (result, err) => {
+
+    codeReader.decodeFromVideoDevice(null, 'qr-video', (result, err, controls) => {
       if (result) {
         const text = result.getText();
         const now = Date.now();
-        if (text === lastScan && now - lastScanTime < 3000) return;
-        lastScan = text; lastScanTime = now;
-        handleScan(text);
+
+        // Immer den erkannten Code in Vorschau anzeigen
+        updateDetectedPreview(text, true);
+        document.getElementById('scan-status').textContent = '🔍 Erkannt: ' + text;
+        document.getElementById('scan-status').className = 'scanner-status detecting';
+
+        if (scanMode === 'auto') {
+          // Nur auslösen wenn nicht gerade aktiv
+          if (!currentET && !document.getElementById('et-card').classList.contains('hidden') === false) {
+            if (text !== lastDetectedCode || now - lastDetectedTime > 3000) {
+              lastDetectedCode = text;
+              lastDetectedTime = now;
+              processCode(text);
+            }
+          }
+        } else if (scanMode === 'stable') {
+          // Muss 1 Sekunde stabil sein
+          if (text !== pendingCode) {
+            pendingCode = text;
+            clearStableTimer();
+            document.getElementById('progress-bar').style.transition = 'none';
+            document.getElementById('progress-bar').style.width = '0';
+            setTimeout(() => {
+              document.getElementById('progress-bar').style.transition = 'width ' + STABLE_DELAY + 'ms linear';
+              document.getElementById('progress-bar').style.width = '100%';
+            }, 10);
+            stableTimer = setTimeout(() => {
+              if (pendingCode === text) {
+                showConfirmRing();
+                processCode(text);
+                pendingCode = '';
+                document.getElementById('progress-bar').style.width = '0';
+              }
+            }, STABLE_DELAY);
+          }
+        } else if (scanMode === 'manual') {
+          // Nur in Vorschau zeigen, nicht auslösen
+          pendingCode = text;
+        }
+      } else {
+        // Nichts erkannt
+        if (scanMode !== 'manual' || !pendingCode) {
+          document.getElementById('scan-status').textContent = 'Halte QR-Code in den Rahmen…';
+          document.getElementById('scan-status').className = 'scanner-status';
+        }
+        if (scanMode === 'stable' && err) {
+          clearStableTimer();
+          document.getElementById('progress-bar').style.width = '0';
+        }
       }
-    });
-    document.getElementById('scan-status').textContent = 'QR-Code auf Kiste halten…';
+    }).then(controls => {
+      // Video-Track für Zoom
+      const video = document.getElementById('qr-video');
+      if (video.srcObject) {
+        const tracks = video.srcObject.getVideoTracks();
+        if (tracks.length > 0) {
+          videoTrack = tracks[0];
+          const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+          if (caps.zoom) {
+            document.getElementById('zoom-slider').max = Math.min(caps.zoom.max, 4);
+            document.getElementById('zoom-slider').style.display = 'block';
+          }
+        }
+      }
+    }).catch(() => {});
+
+    document.getElementById('scan-status').textContent = 'Halte QR-Code in den Rahmen…';
   } catch (e) {
     document.getElementById('scan-status').textContent = '⚠️ Kamera nicht verfügbar';
   }
 }
 
-function handleScan(qrData) {
-  if (!qrData) return;
-  document.getElementById('debug-box').textContent = 'Gesucht: "' + qrData + '" (' + qrData.length + ' Zeichen)';
+function showConfirmRing() {
+  const ring = document.getElementById('confirm-ring');
+  ring.style.display = 'block';
+  setTimeout(() => { ring.style.display = 'none'; }, 600);
+  navigator.vibrate && navigator.vibrate(200);
+}
+
+function processCode(qrData) {
+  if (!qrData || currentET) return;
+
   const raw = qrData.trim();
   const rawUpper = raw.toUpperCase();
-  const rawNoDash = rawUpper.replace(/-/g, '');
+  const rawNoDash = rawUpper.replace(/-/g,'');
 
   let et = etData[rawUpper] || etData[rawNoDash];
 
   if (!et) {
-    const nums = raw.replace(/[^0-9]/g, '');
+    const nums = raw.replace(/[^0-9]/g,'');
     if (nums.length >= 4) {
-      et = etData['ET' + nums] || etData['ET-' + nums.slice(0, 2) + '-' + nums.slice(2)];
-      if (!et) {
-        for (const k of Object.keys(etData)) {
-          if (k.replace(/[^0-9]/g, '') === nums) { et = etData[k]; break; }
-        }
+      for (const k of Object.keys(etData)) {
+        if (k.replace(/[^0-9]/g,'') === nums) { et = etData[k]; break; }
       }
     }
   }
   if (!et) {
     for (const k of Object.keys(etData)) {
-      const artNr = String(etData[k].artNr || '').toUpperCase().trim();
+      const artNr = String(etData[k].artNr||'').toUpperCase().trim();
       if (artNr && artNr === rawUpper) { et = etData[k]; break; }
-    }
-  }
-  if (!et) {
-    for (const k of Object.keys(etData)) {
-      const artNr = String(etData[k].artNr || '').toUpperCase().trim();
-      if (artNr && (artNr.includes(rawUpper) || rawUpper.includes(artNr))) { et = etData[k]; break; }
-    }
-  }
-  if (!et && raw.length >= 3) {
-    for (const k of Object.keys(etData)) {
-      if (String(etData[k].bez || '').toUpperCase().includes(rawUpper)) { et = etData[k]; break; }
     }
   }
 
   if (!et) {
     document.getElementById('scan-status').textContent = '❌ Nicht gefunden: "' + qrData + '"';
-    toast('❌ Nicht gefunden', 'err');
-    navigator.vibrate && navigator.vibrate([100, 50, 100]);
+    document.getElementById('scan-status').className = 'scanner-status';
+    toast('❌ "' + qrData + '" nicht gefunden', 'err');
+    navigator.vibrate && navigator.vibrate([100,50,100]);
+    updateDetectedPreview('Nicht gefunden: ' + qrData, false);
     return;
   }
 
+  showConfirmRing();
   navigator.vibrate && navigator.vibrate(200);
   if (codeReader) codeReader.reset();
   currentET = et; menge = 1; buchTyp = 'abgang';
-  showET(et); updatePreview();
+  document.getElementById('scan-status').textContent = '✅ ' + et.nr + ' gefunden!';
+  document.getElementById('scan-status').className = 'scanner-status confirmed';
+  updateDetectedPreview('✅ ' + et.nr + ' – ' + et.bez, true);
+  showET(et);
+  updatePreview();
 }
 
 function manualSearch() {
   const val = document.getElementById('manual-et').value.trim();
   if (!val) return;
-  handleScan(val);
+  processCode(val);
   document.getElementById('manual-et').value = '';
 }
 
@@ -527,7 +687,7 @@ function showET(et) {
     (et.hersteller ? '🏭 <b>Hersteller:</b> ' + et.hersteller + '<br>' : '') +
     (et.lieferant ? '🚚 <b>Lieferant:</b> ' + et.lieferant + '<br>' : '') +
     (et.artNr ? '🔢 <b>Artikelnummer:</b> ' + et.artNr + '<br>' : '') +
-    '📦 <b>Lager:</b> ' + (et.lagerort || '–') + ' / ' + (et.lagerplatz || '–');
+    '📦 <b>Lager:</b> ' + (et.lagerort||'–') + ' / ' + (et.lagerplatz||'–');
   document.getElementById('s-ist').textContent = et.ist;
   document.getElementById('s-min').textContent = et.min;
   document.getElementById('s-max').textContent = et.max;
@@ -536,7 +696,7 @@ function showET(et) {
   else if (et.ist <= et.min) { status = 'Bestellen'; bClass = 'badge-best'; }
   document.getElementById('et-badge').textContent = status;
   document.getElementById('et-badge').className = 'badge ' + bClass;
-  document.getElementById('s-ist').className = 'stat-val ' + (status === 'OK' ? 'ok' : status === 'Bestellen' ? 'warn' : 'crit');
+  document.getElementById('s-ist').className = 'stat-val ' + (status==='OK'?'ok':status==='Bestellen'?'warn':'crit');
   document.getElementById('et-card').classList.remove('hidden');
   document.getElementById('menge-card').classList.remove('hidden');
   document.getElementById('m-num').textContent = '1';
@@ -544,124 +704,99 @@ function showET(et) {
 
 function setTyp(typ) {
   buchTyp = typ;
-  document.getElementById('btn-abgang').className = 'type-btn' + (typ === 'abgang' ? ' active-abgang' : '');
-  document.getElementById('btn-zugang').className = 'type-btn' + (typ === 'zugang' ? ' active-zugang' : '');
-  document.getElementById('btn-buchen').textContent = typ === 'abgang' ? '✅ Abgang buchen' : '✅ Zugang buchen';
-  document.getElementById('btn-buchen').className = 'btn ' + (typ === 'abgang' ? 'btn-green' : 'btn-blue');
+  document.getElementById('btn-abgang').className = 'type-btn' + (typ==='abgang'?' active-abgang':'');
+  document.getElementById('btn-zugang').className = 'type-btn' + (typ==='zugang'?' active-zugang':'');
+  document.getElementById('btn-buchen').textContent = typ==='abgang' ? '✅ Abgang buchen' : '✅ Zugang buchen';
+  document.getElementById('btn-buchen').className = 'btn ' + (typ==='abgang'?'btn-green':'btn-blue');
   updatePreview();
 }
 
-function chM(d) { menge = Math.max(1, menge + d); document.getElementById('m-num').textContent = menge; updatePreview(); }
+function chM(d) { menge = Math.max(1, menge+d); document.getElementById('m-num').textContent = menge; updatePreview(); }
 
 function updatePreview() {
   if (!currentET) return;
-  const neu = buchTyp === 'abgang' ? currentET.ist - menge : currentET.ist + menge;
-  const sign = buchTyp === 'abgang' ? '−' : '+';
-  document.getElementById('preview-neu').innerHTML = `Bestand: ${currentET.ist} ${sign}${menge} = <strong>${Math.max(0, neu)}</strong>`;
-}
-
-async function findETRow(etNr) {
-  try {
-    const range = await gGet(`/drives/${driveId}/items/${fileId}/workbook/worksheets/${ET_SHEET}/range(address='A${FIRST_ROW}:A500')`);
-    if (range.values) {
-      for (let i = 0; i < range.values.length; i++) {
-        const val = String(range.values[i][0] || '').trim().toUpperCase();
-        if (val === etNr.trim().toUpperCase()) return i + FIRST_ROW;
-      }
-    }
-  } catch (e) { console.error('findETRow:', e); }
-  return currentET.row;
+  const neu = buchTyp==='abgang' ? currentET.ist - menge : currentET.ist + menge;
+  const sign = buchTyp==='abgang' ? '−' : '+';
+  document.getElementById('preview-neu').innerHTML = 'Bestand: ' + currentET.ist + ' ' + sign + menge + ' = <strong>' + Math.max(0,neu) + '</strong>';
 }
 
 async function buchen() {
   if (!currentET || !fileId) return;
-  const neu = buchTyp === 'abgang' ? currentET.ist - menge : currentET.ist + menge;
+  const neu = buchTyp==='abgang' ? currentET.ist - menge : currentET.ist + menge;
   if (neu < 0) { toast('⚠️ Bestand wird negativ!', 'err'); return; }
-
   let liveRow = currentET.row;
-  showLoading('Wird in SharePoint gespeichert…');
+  showLoading('Wird gespeichert…');
   try {
-    liveRow = await findETRow(currentET.nr);
-    document.getElementById('debug-box').textContent = 'Schreibe ' + currentET.nr + ' in Zeile ' + liveRow + ' → Bestand: ' + neu;
-
-    await gPatch(`/drives/${driveId}/items/${fileId}/workbook/worksheets/${ET_SHEET}/range(address='F${liveRow}')`, { values: [[neu]] });
-
+    // Zeile live suchen
+    const range = await gGet('/drives/' + driveId + '/items/' + fileId + '/workbook/worksheets/' + ET_SHEET + '/range(address=\'A' + FIRST_ROW + ':A500\')');
+    if (range.values) {
+      for (let i = 0; i < range.values.length; i++) {
+        if (String(range.values[i][0]||'').trim().toUpperCase() === currentET.nr.toUpperCase()) {
+          liveRow = i + FIRST_ROW; break;
+        }
+      }
+    }
+    await gPatch('/drives/' + driveId + '/items/' + fileId + '/workbook/worksheets/' + ET_SHEET + '/range(address=\'F' + liveRow + '\')', { values: [[neu]] });
     const altIst = currentET.ist;
-    const k = currentET.nr.replace(/-/g, '').toUpperCase();
+    const k = currentET.nr.replace(/-/g,'').toUpperCase();
     if (etData[k]) etData[k].ist = neu;
     currentET.ist = neu;
-
-    bookings.unshift({
-      nr: currentET.nr, bez: currentET.bez, typ: buchTyp, menge, neu, altIst,
-      time: new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }),
-      user: userName
-    });
-
-    if (buchTyp === 'abgang' && neu <= currentET.min) {
+    bookings.unshift({ nr: currentET.nr, bez: currentET.bez, typ: buchTyp, menge, neu, altIst, time: new Date().toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'}), user: userName });
+    if (buchTyp==='abgang' && neu <= currentET.min) {
       showLoading('Mail wird gesendet…');
       await sendeMail(currentET, neu);
     }
-
     hideLoading();
-    toast(`✅ ${currentET.nr} ${buchTyp === 'abgang' ? '−' : '+'}${menge} → Bestand: ${neu}`, 'ok');
+    toast('✅ ' + currentET.nr + ' ' + (buchTyp==='abgang'?'−':'+') + menge + ' → ' + neu, 'ok');
     resetScan();
   } catch (e) {
     hideLoading();
-    console.error('buchen:', e);
-    document.getElementById('debug-box').textContent = 'FEHLER: ' + e.message + ' | ET: ' + currentET.nr + ' | Zeile: ' + liveRow;
-    toast('⚠️ Fehler: ' + e.message.substring(0, 80), 'err');
+    toast('⚠️ Fehler: ' + e.message.substring(0,80), 'err');
   }
 }
 
 async function sendeMail(et, neuerIst) {
   const bm = et.max - neuerIst;
-  const datum = new Date().toLocaleString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const html = `<div style="font-family:Arial,sans-serif;max-width:600px;"><div style="background:#1A5C1A;color:#fff;padding:20px;border-radius:8px 8px 0 0;"><h2 style="margin:0;">⚠️ Meldebestand erreicht</h2><p style="margin:4px 0 0;opacity:.8;font-size:13px;">Tschopp Holzindustrie AG</p></div><div style="background:#fff;border:1px solid #ddd;border-top:none;padding:20px;border-radius:0 0 8px 8px;"><table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;"><tr style="background:#f5f5f5;"><td style="padding:8px 12px;font-weight:bold;width:45%;">ET-Nummer</td><td style="padding:8px 12px;">${et.nr}</td></tr><tr><td style="padding:8px 12px;font-weight:bold;">Bezeichnung</td><td style="padding:8px 12px;">${et.bez}</td></tr><tr style="background:#f5f5f5;"><td style="padding:8px 12px;font-weight:bold;">Anlage</td><td style="padding:8px 12px;">${et.anlage || '–'}</td></tr><tr><td style="padding:8px 12px;font-weight:bold;">Lagerort</td><td style="padding:8px 12px;">${et.lagerort || '–'} / ${et.lagerplatz || '–'}</td></tr><tr style="background:#f5f5f5;"><td style="padding:8px 12px;font-weight:bold;">Hersteller</td><td style="padding:8px 12px;">${et.hersteller || '–'}</td></tr></table><div style="background:#FFF3CD;border:1px solid #FFCA28;border-radius:8px;padding:16px;margin-bottom:16px;"><table style="width:100%;font-size:14px;border-collapse:collapse;"><tr><td style="padding:4px 0;font-weight:bold;">Bestand Ist</td><td style="color:#E53935;font-weight:bold;font-size:20px;">${neuerIst} ${et.einheit}</td></tr><tr><td style="padding:4px 0;font-weight:bold;">Mindestbestand</td><td>${et.min} ${et.einheit}</td></tr><tr><td style="padding:4px 0;font-weight:bold;">Maximalbestand</td><td>${et.max} ${et.einheit}</td></tr></table></div><div style="background:#1A5C1A;color:#fff;border-radius:8px;padding:16px;margin-bottom:16px;text-align:center;"><div style="font-size:12px;opacity:.8;margin-bottom:4px;">BESTELLMENGE</div><div style="font-size:36px;font-weight:bold;">${bm} ${et.einheit}</div></div><table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;"><tr style="background:#f5f5f5;"><td style="padding:8px 12px;font-weight:bold;width:45%;">Lieferant</td><td style="padding:8px 12px;">${et.lieferant || '–'}</td></tr><tr><td style="padding:8px 12px;font-weight:bold;">Artikelnummer</td><td style="padding:8px 12px;">${et.artNr || '–'}</td></tr><tr style="background:#f5f5f5;"><td style="padding:8px 12px;font-weight:bold;">Lieferzeit</td><td style="padding:8px 12px;">${et.lz || '–'} Tage</td></tr><tr><td style="padding:8px 12px;font-weight:bold;">Einkaufspreis</td><td style="padding:8px 12px;">CHF ${et.ekp ? et.ekp.toFixed(2) : '–'}</td></tr></table><div style="border-top:1px solid #eee;padding-top:12px;font-size:12px;color:#888;">📱 ET-Scanner App &nbsp;|&nbsp; 👤 ${userName} &nbsp;|&nbsp; 📅 ${datum}</div></div></div>`;
-  const payload = {
-    message: {
-      subject: '⚠️ MELDEBESTAND: ' + et.nr + ' – ' + et.bez,
-      body: { contentType: 'HTML', content: html },
-      toRecipients: [{ emailAddress: { address: MAIL_TO } }],
-      ccRecipients: [{ emailAddress: { address: MAIL_CC } }]
-    },
-    saveToSentItems: true
-  };
+  const datum = new Date().toLocaleString('de-CH',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const html = '<div style="font-family:Arial,sans-serif;"><h2 style="color:#1A5C1A;">⚠️ Meldebestand erreicht</h2><p><b>ET-Nummer:</b> '+et.nr+'<br><b>Bezeichnung:</b> '+et.bez+'<br><b>Anlage:</b> '+(et.anlage||'–')+'</p><p><b>Bestand Ist:</b> <span style="color:red;font-size:20px;">'+neuerIst+'</span><br><b>Mindestbestand:</b> '+et.min+'<br><b>Maximalbestand:</b> '+et.max+'<br><b>Bestellmenge:</b> <b>'+bm+'</b></p><p><b>Lieferant:</b> '+(et.lieferant||'–')+'<br><b>Artikelnummer:</b> '+(et.artNr||'–')+'<br><b>Lieferzeit:</b> '+(et.lz||'–')+' Tage</p><p style="color:#888;font-size:12px;">👤 '+userName+' | 📅 '+datum+'</p></div>';
   try {
-    const s = await gPost('/me/sendMail', payload);
-    if (s === 202) toast('📧 Mail gesendet!', 'info');
-  } catch (e) { console.error('sendeMail:', e); }
+    await gPost('/me/sendMail', { message: { subject: '⚠️ MELDEBESTAND: '+et.nr+' – '+et.bez, body: { contentType: 'HTML', content: html }, toRecipients: [{emailAddress:{address:MAIL_TO}}], ccRecipients: [{emailAddress:{address:MAIL_CC}}] }, saveToSentItems: true });
+    toast('📧 Mail gesendet!', 'info');
+  } catch(e) {}
 }
 
 function resetScan() {
   currentET = null; menge = 1; buchTyp = 'abgang';
   document.getElementById('et-card').classList.add('hidden');
   document.getElementById('menge-card').classList.add('hidden');
-  document.getElementById('debug-box').textContent = 'Warte auf Scan…';
+  pendingCode = '';
+  clearStableTimer();
+  updateDetectedPreview('', false);
+  document.getElementById('progress-bar').style.width = '0';
+  document.getElementById('scan-status').textContent = 'Halte QR-Code in den Rahmen…';
+  document.getElementById('scan-status').className = 'scanner-status';
   setTyp('abgang');
   startScanner();
 }
 
 function goTab(t) {
-  ['scan', 'hist', 'info'].forEach(x => document.getElementById('tab-' + x).classList.toggle('hidden', x !== t));
-  document.querySelectorAll('.tab').forEach((b, i) => b.classList.toggle('on', ['scan', 'hist', 'info'][i] === t));
-  if (t === 'hist') renderHist();
+  ['scan','hist','info'].forEach(x => document.getElementById('tab-'+x).classList.toggle('hidden', x!==t));
+  document.querySelectorAll('.tab').forEach((b,i) => b.classList.toggle('on', ['scan','hist','info'][i]===t));
+  if (t==='hist') renderHist();
 }
 
 function renderHist() {
   const el = document.getElementById('hist-list');
-  if (!bookings.length) { el.innerHTML = '<div style="text-align:center;padding:30px;color:#ccc;font-size:14px;">Noch keine Buchungen</div>'; return; }
-  el.innerHTML = bookings.map(b =>
-    `<div class="hist-item"><div><div class="hist-nr">${b.nr} <span style="font-size:11px;color:#aaa">${b.typ === 'abgang' ? 'Abgang' : 'Zugang'}</span></div><div class="hist-bez">${b.bez}</div><div class="hist-time">🕐 ${b.time} · ${b.altIst}→${b.neu} · ${b.user}</div></div><div class="hist-amt ${b.typ}">${b.typ === 'abgang' ? '−' : '+'}${b.menge}</div></div>`
-  ).join('');
+  if (!bookings.length) { el.innerHTML='<div style="text-align:center;padding:30px;color:#ccc;font-size:14px;">Noch keine Buchungen</div>'; return; }
+  el.innerHTML = bookings.map(b => '<div class="hist-item"><div><div class="hist-nr">'+b.nr+' <span style="font-size:11px;color:#aaa">'+(b.typ==='abgang'?'Abgang':'Zugang')+'</span></div><div class="hist-bez">'+b.bez+'</div><div class="hist-time">🕐 '+b.time+' · '+b.altIst+'→'+b.neu+' · '+b.user+'</div></div><div class="hist-amt '+b.typ+'">'+(b.typ==='abgang'?'−':'+')+ b.menge+'</div></div>').join('');
 }
 
-function showLoading(txt) { document.getElementById('loading-text').textContent = txt || 'Laden…'; document.getElementById('loading').classList.remove('hidden'); }
+function showLoading(txt) { document.getElementById('loading-text').textContent = txt||'Laden…'; document.getElementById('loading').classList.remove('hidden'); }
 function hideLoading() { document.getElementById('loading').classList.add('hidden'); }
-
-function toast(msg, type = '') {
+function toast(msg, type='') {
   const el = document.getElementById('toast');
   el.textContent = msg;
-  el.className = 'toast ' + (type === 'ok' ? 'ok' : type === 'err' ? 'err' : type === 'info' ? 'info' : '');
+  el.className = 'toast '+(type==='ok'?'ok':type==='err'?'err':type==='info'?'info':'');
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 3500);
 }
