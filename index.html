@@ -266,12 +266,7 @@ body {
 }
 
 /* Overlay gradient */
-.scanner-overlay {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at center, transparent 38%, rgba(0,0,0,.55) 100%);
-  pointer-events: none;
-}
+
 
 /* Zielrahmen */
 .reticle {
@@ -739,8 +734,7 @@ body {
       <!-- Scanner -->
       <div class="scanner-frame">
         <video id="qr-video" autoplay playsinline muted></video>
-        <div class="scanner-overlay"></div>
-        <div class="reticle">
+                <div class="reticle">
           <div class="reticle-corner tl"></div>
           <div class="reticle-corner tr"></div>
           <div class="reticle-corner bl"></div>
@@ -868,7 +862,7 @@ const SP_SITE_PATH = '/sites/Instandhaltung';
 const SP_FOLDER_PATH = '/ET-Liste';
 const SP_FILENAME = 'ET-Liste_Tschopp_Final V2.xlsm';
 const ET_SHEET = 'ET-Liste';
-const FIRST_ROW = 7;
+const FIRST_ROW = 5;
 const MAIL_TO = 'flavio.wyss@tschopp.swiss';
 const MAIL_CC = 'christopher.nagel@tschopp.swiss';
 const REDIRECT = window.location.origin + window.location.pathname;
