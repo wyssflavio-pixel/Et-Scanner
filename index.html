@@ -6,7 +6,7 @@
 <title>ET-Scanner – Tschopp</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/@zxing/library@0.18.6/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://alcdn.msauth.net/browser/2.38.2/js/msal-browser.min.js"></script>
 <style>
 :root {
@@ -223,31 +223,10 @@ body {
 }
 
 /* ─── SCAN MODE ─── */
-.mode-strip {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-.mode-pill {
-  flex: 1;
-  padding: 8px 6px;
-  border: 1.5px solid var(--fog);
-  border-radius: 10px;
-  background: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--stone);
-  cursor: pointer;
-  text-align: center;
-  transition: all .18s;
-  font-family: 'Inter', sans-serif;
-}
-.mode-pill .ico { font-size: 17px; display: block; margin-bottom: 3px; }
-.mode-pill.on {
-  border-color: var(--forest);
-  background: var(--mist);
-  color: var(--forest);
-}
+
+
+
+
 
 /* ─── SCANNER ─── */
 .scanner-frame {
@@ -305,20 +284,8 @@ body {
 }
 
 /* Progress arc */
-.progress-wrap {
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  height: 3px;
-  background: rgba(255,255,255,.15);
-  display: none;
-}
-.progress-bar {
-  height: 100%;
-  background: var(--sage);
-  width: 0;
-  transition: width linear;
-  box-shadow: 0 0 8px var(--sage);
-}
+
+
 
 /* Status pill */
 .scan-pill {
@@ -719,18 +686,8 @@ body {
     <!-- ── SCAN TAB ── -->
     <div id="tab-scan">
 
-      <!-- Scan-Modus -->
-      <div class="mode-strip">
-        <button class="mode-pill on" id="mode-stable" onclick="setScanMode('stable')">
-          <span class="ico">🎯</span>Stabil
-        </button>
-        <button class="mode-pill" id="mode-auto" onclick="setScanMode('auto')">
-          <span class="ico">⚡</span>Sofort
-        </button>
-        <button class="mode-pill" id="mode-manual" onclick="setScanMode('manual')">
-          <span class="ico">👆</span>Manuell
-        </button>
-      </div>
+      <!-- SEITE 1: SCANNER -->
+      <div id="page-scanner">
 
       <!-- Scanner -->
       <div class="scanner-frame">
@@ -742,14 +699,12 @@ body {
           <div class="reticle-corner br"></div>
           <div class="reticle-line" id="reticle-line"></div>
         </div>
-        <div class="progress-wrap" id="progress-wrap">
-          <div class="progress-bar" id="progress-bar"></div>
-        </div>
+    
         <div class="scan-pill wait" id="scan-pill">Halte Code in den Rahmen</div>
       </div>
 
       <!-- Manueller Button -->
-      <button class="capture-btn" id="capture-btn" onclick="manualCapture()">
+      <button class="capture-btn" id="capture-btn" onclick="manualCapture()" style="display:none!important">
         📸 &nbsp;Diesen Code übernehmen
       </button>
 
@@ -759,8 +714,18 @@ body {
         <button onclick="manualSearch()">🔍</button>
       </div>
 
+      </div><!-- Ende Seite 1 -->
+
+      <!-- SEITE 2: ET-DETAIL + BUCHUNG -->
+      <div id="page-detail" style="display:none;">
+
+      <!-- Zurück-Button -->
+      <button onclick="zurueckZuScanner()" style="display:flex;align-items:center;gap:8px;background:none;border:none;color:var(--stone);font-size:14px;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;padding:4px 0;margin-bottom:14px;">
+        ← Zurück zum Scanner
+      </button>
+
       <!-- ET-Karte -->
-      <div class="card hidden" id="et-card">
+      <div class="card" id="et-card">
         <div class="et-card-inner">
           <div class="et-num" id="et-num">–</div>
           <div class="et-name" id="et-name">–</div>
@@ -785,7 +750,7 @@ body {
       </div>
 
       <!-- Buchung -->
-      <div class="card hidden" id="menge-card">
+      <div class="card" id="menge-card">
         <div class="card-label">Buchung</div>
         <div class="type-row">
           <div class="type-card abgang" id="type-abgang" onclick="setTyp('abgang')">
@@ -809,7 +774,9 @@ body {
         <button class="btn-primary btn-forest" id="btn-buchen" onclick="buchen()">✅ &nbsp;Abgang buchen</button>
         <button class="btn-flat" onclick="resetScan()">↩ &nbsp;Abbrechen</button>
       </div>
-    </div>
+      </div><!-- Ende Seite 2 -->
+
+    </div><!-- Ende tab-scan -->
 
     <!-- ── VERLAUF TAB ── -->
     <div id="tab-hist" class="hidden">
@@ -882,10 +849,10 @@ let etData={},bookings=[];
 let codeReader=null;
 
 // Scanner state
-let scanMode='stable';
-let STABLE_MS=1000;
+let scanMode='auto';
+
 let COOLDOWN_MS=2500;
-let CONFIRM_COUNT=3;
+let CONFIRM_COUNT=2; // 2x = schnell aber zuverlässig
 let consecutiveCount=0;
 let lastRawCode='';
 let cooldownActive=false;
@@ -893,18 +860,7 @@ let cooldownTimer=null;
 let pendingCode='';
 let stableTimer=null;
 
-function setScanMode(mode){
-  scanMode=mode;
-  document.querySelectorAll('.mode-pill').forEach(b=>b.classList.remove('on'));
-  document.getElementById('mode-'+mode).classList.add('on');
-  const cb=document.getElementById('capture-btn');
-  const pw=document.getElementById('progress-wrap');
-  const rl=document.getElementById('reticle-line');
-  cb.style.display=mode==='manual'?'block':'none';
-  pw.style.display=mode==='stable'?'block':'none';
-  rl.className='reticle-line'+(mode==='stable'?' show':'');
-  resetScanState();
-}
+
 
 function resetScanState(){
   pendingCode='';consecutiveCount=0;lastRawCode='';
@@ -971,7 +927,9 @@ async function forceLogout(){
   catch(e){window.location.reload();}
 }
 async function logout(){
-  if(codeReader)codeReader.reset();
+  const video = document.getElementById('qr-video');
+  if(video && video.srcObject) video.srcObject.getTracks().forEach(t=>t.stop());
+  if(codeReader){cancelAnimationFrame(codeReader);codeReader=null;}
   await msalInst.logoutRedirect({postLogoutRedirectUri:REDIRECT});
 }
 async function afterLogin(){
@@ -983,7 +941,6 @@ async function afterLogin(){
   showLoading('Verbinde mit SharePoint…');
   await loadETData();
   hideLoading();
-  setScanMode('stable');
   startScanner();
 }
 
@@ -1066,61 +1023,71 @@ async function reloadData(){showLoading('Aktualisiere…');await loadETData();hi
 // ─── SCANNER ───
 function startScanner(){
   try{
-    if(codeReader){codeReader.reset();codeReader=null;}
+    if(codeReader){
+      cancelAnimationFrame(codeReader);
+      codeReader=null;
+    }
     resetScanState();
-    // Nur QR-Codes lesen (keine 1D-Barcodes die fälschlicherweise erkannt werden)
-    const hints = new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
-    codeReader=new ZXing.BrowserMultiFormatReader(hints);
-    codeReader.decodeFromVideoDevice(null,'qr-video',(result,err)=>{
-      if(currentET||cooldownActive)return;
-      if(result){
-        const text=result.getText().trim();
-        if(!text)return;
-        if(text===lastRawCode){
-          consecutiveCount++;
-        }else{
-          lastRawCode=text;consecutiveCount=1;
-          clearStableTimer();pendingCode=text;
-          document.getElementById('progress-bar').style.transition='none';
-          document.getElementById('progress-bar').style.width='0';
+
+    const video = document.getElementById('qr-video');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', {willReadFrequently: true});
+
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width:{ideal:1280}, height:{ideal:720} }
+    }).then(stream => {
+      video.srcObject = stream;
+      video.setAttribute('playsinline', true);
+      video.play();
+
+      function tick(){
+        if(currentET || cooldownActive){
+          codeReader = requestAnimationFrame(tick);
+          return;
         }
-        setPill('detect','🔍 '+text);
-        if(scanMode==='auto'){
-          if(consecutiveCount>=CONFIRM_COUNT)processCode(text);
-        }else if(scanMode==='stable'){
-          if(!stableTimer){
-            setTimeout(()=>{
-              document.getElementById('progress-bar').style.transition='width '+STABLE_MS+'ms linear';
-              document.getElementById('progress-bar').style.width='100%';
-            },10);
-            stableTimer=setTimeout(()=>{
-              if(pendingCode===text&&!cooldownActive&&!currentET){
-                navigator.vibrate&&navigator.vibrate(200);
+        if(video.readyState === video.HAVE_ENOUGH_DATA){
+          canvas.height = video.videoHeight;
+          canvas.width = video.videoWidth;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'dontInvert'
+          });
+
+          if(code){
+            const text = code.data.trim();
+            if(text){
+              if(text === lastRawCode){
+                consecutiveCount++;
+              } else {
+                lastRawCode = text;
+                consecutiveCount = 1;
+              }
+              setPill('detect', '🔍 ' + text);
+              if(consecutiveCount >= CONFIRM_COUNT){
                 processCode(text);
               }
-              stableTimer=null;
-            },STABLE_MS);
-          }
-        }else if(scanMode==='manual'){
-          pendingCode=text;
-        }
-      }else{
-        if(!cooldownActive&&!currentET){
-          consecutiveCount=0;
-          if(scanMode==='stable'){
-            clearStableTimer();
-            document.getElementById('progress-bar').style.transition='width 0.2s';
-            document.getElementById('progress-bar').style.width='0';
-          }
-          if(lastRawCode){
-            lastRawCode='';
-            setPill('wait','Halte Code in den Rahmen');
+            }
+          } else {
+            if(lastRawCode){
+              consecutiveCount = 0;
+              lastRawCode = '';
+              setPill('wait', 'Halte Code in den Rahmen');
+            }
           }
         }
+        codeReader = requestAnimationFrame(tick);
       }
+      codeReader = requestAnimationFrame(tick);
+      setPill('wait', 'Halte Code in den Rahmen');
+
+    }).catch(e => {
+      setPill('wait', '⚠️ Kamera nicht verfügbar');
     });
-  }catch(e){setPill('wait','⚠️ Kamera nicht verfügbar');}
+
+  } catch(e){
+    setPill('wait', '⚠️ Kamera nicht verfügbar');
+  }
 }
 
 function processCode(qrData){
@@ -1156,13 +1123,12 @@ function manualSearch(){
 }
 
 function showET(et){
-  // Kamera sanft ausblenden
-  const frame = document.getElementById('scanner-frame');
-  const modeStrip = document.getElementById('mode-strip');
-  const searchRow = document.querySelector('.search-row');
-  if(frame) frame.style.display='none';
-  if(modeStrip) modeStrip.style.display='none';
-  if(searchRow) searchRow.style.display='none';
+  // Kamera stoppen
+  if(codeReader){codeReader.reset();codeReader=null;}
+  // Seite wechseln
+  document.getElementById('page-scanner').style.display='none';
+  document.getElementById('page-detail').style.display='block';
+  window.scrollTo(0,0);
   document.getElementById('et-num').textContent=et.nr;
   document.getElementById('et-name').textContent=et.bez;
   document.getElementById('et-machine').textContent=et.anlage||'–';
@@ -1181,11 +1147,9 @@ function showET(et){
   document.getElementById('s-ist').className='stat-num '+(status==='OK'?'num-ok':status==='Bestellen'?'num-warn':'num-crit');
   document.getElementById('s-min').textContent=et.min;
   document.getElementById('s-max').textContent=et.max;
-  document.getElementById('et-card').classList.remove('hidden');
-  document.getElementById('menge-card').classList.remove('hidden');
+  
+  
   document.getElementById('m-num').textContent='1';
-  // Nach oben scrollen (ET-Karte ist oben da Kamera weg)
-  setTimeout(()=>{ window.scrollTo(0, 0); }, 50);
 }
 
 function setTyp(typ){
@@ -1248,15 +1212,24 @@ async function sendeMail(et,neuerIst){
 
 function resetScan(){
   currentET=null;menge=1;buchTyp='abgang';
-  document.getElementById('et-card').classList.add('hidden');
-  document.getElementById('menge-card').classList.add('hidden');
-  // Kamera wieder einblenden
-  document.getElementById('scanner-frame').style.display='block';
-  document.getElementById('mode-strip').style.display='flex';
-  document.querySelector('.search-row').style.display='flex';
-  setTyp('abgang');resetScanState();startScanner();
-  // Nach oben scrollen
-  window.scrollTo({top:0, behavior:'smooth'});
+  setTyp('abgang');
+  // Video-Stream stoppen
+  const video = document.getElementById('qr-video');
+  if(video.srcObject){
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
+  if(codeReader){ cancelAnimationFrame(codeReader); codeReader=null; }
+  // Zurück zu Scanner-Seite
+  document.getElementById('page-detail').style.display='none';
+  document.getElementById('page-scanner').style.display='block';
+  window.scrollTo(0,0);
+  resetScanState();
+  startScanner();
+}
+
+function zurueckZuScanner(){
+  resetScan();
 }
 
 function goTab(t){
