@@ -1022,72 +1022,81 @@ async function reloadData(){showLoading('Aktualisiere…');await loadETData();hi
 
 // ─── SCANNER ───
 function startScanner(){
-  try{
-    if(codeReader){
-      cancelAnimationFrame(codeReader);
-      codeReader=null;
+  // Stream stoppen falls noch einer läuft
+  const video = document.getElementById('qr-video');
+  if(video.srcObject){
+    video.srcObject.getTracks().forEach(t=>t.stop());
+    video.srcObject=null;
+  }
+  if(codeReader){cancelAnimationFrame(codeReader);codeReader=null;}
+  resetScanState();
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d',{willReadFrequently:true});
+
+  // Erst Rückkamera versuchen, dann beliebige Kamera
+  const constraints = [
+    {video:{facingMode:{exact:'environment'}}},
+    {video:{facingMode:'environment'}},
+    {video:true}
+  ];
+
+  function tryCamera(idx){
+    if(idx >= constraints.length){
+      setPill('wait','⚠️ Kamera nicht verfügbar');
+      return;
     }
-    resetScanState();
-
-    const video = document.getElementById('qr-video');
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d', {willReadFrequently: true});
-
-    navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width:{ideal:1280}, height:{ideal:720} }
-    }).then(stream => {
-      video.srcObject = stream;
-      video.setAttribute('playsinline', true);
-      video.play();
-
-      function tick(){
-        if(currentET || cooldownActive){
-          codeReader = requestAnimationFrame(tick);
-          return;
-        }
-        if(video.readyState === video.HAVE_ENOUGH_DATA){
-          canvas.height = video.videoHeight;
-          canvas.width = video.videoWidth;
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: 'dontInvert'
-          });
-
-          if(code){
-            const text = code.data.trim();
-            if(text){
-              if(text === lastRawCode){
-                consecutiveCount++;
-              } else {
-                lastRawCode = text;
-                consecutiveCount = 1;
+    navigator.mediaDevices.getUserMedia(constraints[idx])
+    .then(stream=>{
+      video.srcObject=stream;
+      video.setAttribute('playsinline','true');
+      video.setAttribute('muted','true');
+      video.play().then(()=>{
+        function tick(){
+          if(currentET||cooldownActive){
+            codeReader=requestAnimationFrame(tick);
+            return;
+          }
+          if(video.readyState===video.HAVE_ENOUGH_DATA && video.videoWidth>0){
+            canvas.width=video.videoWidth;
+            canvas.height=video.videoHeight;
+            ctx.drawImage(video,0,0,canvas.width,canvas.height);
+            const img=ctx.getImageData(0,0,canvas.width,canvas.height);
+            const code=jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'});
+            if(code && code.data){
+              const text=code.data.trim();
+              if(text){
+                if(text===lastRawCode){
+                  consecutiveCount++;
+                }else{
+                  lastRawCode=text;
+                  consecutiveCount=1;
+                }
+                setPill('detect','🔍 '+text);
+                if(consecutiveCount>=CONFIRM_COUNT) processCode(text);
               }
-              setPill('detect', '🔍 ' + text);
-              if(consecutiveCount >= CONFIRM_COUNT){
-                processCode(text);
+            }else{
+              if(lastRawCode){
+                consecutiveCount=0;
+                lastRawCode='';
+                setPill('wait','Halte Code in den Rahmen');
               }
-            }
-          } else {
-            if(lastRawCode){
-              consecutiveCount = 0;
-              lastRawCode = '';
-              setPill('wait', 'Halte Code in den Rahmen');
             }
           }
+          codeReader=requestAnimationFrame(tick);
         }
-        codeReader = requestAnimationFrame(tick);
-      }
-      codeReader = requestAnimationFrame(tick);
-      setPill('wait', 'Halte Code in den Rahmen');
-
-    }).catch(e => {
-      setPill('wait', '⚠️ Kamera nicht verfügbar');
-    });
-
-  } catch(e){
-    setPill('wait', '⚠️ Kamera nicht verfügbar');
+        codeReader=requestAnimationFrame(tick);
+        setPill('wait','Halte Code in den Rahmen');
+      }).catch(()=>tryCamera(idx+1));
+    })
+    .catch(()=>tryCamera(idx+1));
   }
+
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    setPill('wait','⚠️ Kamera nicht unterstützt');
+    return;
+  }
+  tryCamera(0);
 }
 
 function processCode(qrData){
