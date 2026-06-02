@@ -6,7 +6,7 @@
 <title>ET-Scanner – Tschopp</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script src="https://unpkg.com/@zxing/library@0.18.6/umd/index.min.js"></script>
 <script src="https://alcdn.msauth.net/browser/2.38.2/js/msal-browser.min.js"></script>
 <style>
 :root {
@@ -927,9 +927,7 @@ async function forceLogout(){
   catch(e){window.location.reload();}
 }
 async function logout(){
-  const video = document.getElementById('qr-video');
-  if(video && video.srcObject) video.srcObject.getTracks().forEach(t=>t.stop());
-  if(codeReader){cancelAnimationFrame(codeReader);codeReader=null;}
+  if(codeReader){try{codeReader.reset();}catch(e){} codeReader=null;}
   await msalInst.logoutRedirect({postLogoutRedirectUri:REDIRECT});
 }
 async function afterLogin(){
@@ -1022,81 +1020,43 @@ async function reloadData(){showLoading('Aktualisiere…');await loadETData();hi
 
 // ─── SCANNER ───
 function startScanner(){
-  // Stream stoppen falls noch einer läuft
   const video = document.getElementById('qr-video');
   if(video.srcObject){
     video.srcObject.getTracks().forEach(t=>t.stop());
     video.srcObject=null;
   }
-  if(codeReader){cancelAnimationFrame(codeReader);codeReader=null;}
+  if(codeReader){try{codeReader.reset();}catch(e){} codeReader=null;}
   resetScanState();
 
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d',{willReadFrequently:true});
-
-  // Erst Rückkamera versuchen, dann beliebige Kamera
-  const constraints = [
-    {video:{facingMode:{exact:'environment'}}},
-    {video:{facingMode:'environment'}},
-    {video:true}
-  ];
-
-  function tryCamera(idx){
-    if(idx >= constraints.length){
-      setPill('wait','⚠️ Kamera nicht verfügbar');
-      return;
-    }
-    navigator.mediaDevices.getUserMedia(constraints[idx])
-    .then(stream=>{
-      video.srcObject=stream;
-      video.setAttribute('playsinline','true');
-      video.setAttribute('muted','true');
-      video.play().then(()=>{
-        function tick(){
-          if(currentET||cooldownActive){
-            codeReader=requestAnimationFrame(tick);
-            return;
-          }
-          if(video.readyState===video.HAVE_ENOUGH_DATA && video.videoWidth>0){
-            canvas.width=video.videoWidth;
-            canvas.height=video.videoHeight;
-            ctx.drawImage(video,0,0,canvas.width,canvas.height);
-            const img=ctx.getImageData(0,0,canvas.width,canvas.height);
-            const code=jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'});
-            if(code && code.data){
-              const text=code.data.trim();
-              if(text){
-                if(text===lastRawCode){
-                  consecutiveCount++;
-                }else{
-                  lastRawCode=text;
-                  consecutiveCount=1;
-                }
-                setPill('detect','🔍 '+text);
-                if(consecutiveCount>=CONFIRM_COUNT) processCode(text);
-              }
-            }else{
-              if(lastRawCode){
-                consecutiveCount=0;
-                lastRawCode='';
-                setPill('wait','Halte Code in den Rahmen');
-              }
-            }
-          }
-          codeReader=requestAnimationFrame(tick);
+  try{
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.QR_CODE]);
+    codeReader = new ZXing.BrowserMultiFormatReader(hints);
+    codeReader.decodeFromVideoDevice(null,'qr-video',(result,err)=>{
+      if(currentET||cooldownActive) return;
+      if(result){
+        const text=result.getText().trim();
+        if(!text) return;
+        if(text===lastRawCode){
+          consecutiveCount++;
+        }else{
+          lastRawCode=text;
+          consecutiveCount=1;
         }
-        codeReader=requestAnimationFrame(tick);
-        setPill('wait','Halte Code in den Rahmen');
-      }).catch(()=>tryCamera(idx+1));
-    })
-    .catch(()=>tryCamera(idx+1));
+        setPill('detect','🔍 '+text);
+        if(consecutiveCount>=CONFIRM_COUNT) processCode(text);
+      }else{
+        if(lastRawCode){
+          consecutiveCount=0;
+          lastRawCode='';
+          setPill('wait','Halte Code in den Rahmen');
+        }
+      }
+    });
+    setPill('wait','Halte Code in den Rahmen');
+  }catch(e){
+    setPill('wait','⚠️ Kamera nicht verfügbar');
   }
-
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
-    setPill('wait','⚠️ Kamera nicht unterstützt');
-    return;
-  }
-  tryCamera(0);
 }
 
 function processCode(qrData){
@@ -1222,14 +1182,7 @@ async function sendeMail(et,neuerIst){
 function resetScan(){
   currentET=null;menge=1;buchTyp='abgang';
   setTyp('abgang');
-  // Video-Stream stoppen
-  const video = document.getElementById('qr-video');
-  if(video.srcObject){
-    video.srcObject.getTracks().forEach(t => t.stop());
-    video.srcObject = null;
-  }
-  if(codeReader){ cancelAnimationFrame(codeReader); codeReader=null; }
-  // Zurück zu Scanner-Seite
+  if(codeReader){try{codeReader.reset();}catch(e){} codeReader=null;}
   document.getElementById('page-detail').style.display='none';
   document.getElementById('page-scanner').style.display='block';
   window.scrollTo(0,0);
