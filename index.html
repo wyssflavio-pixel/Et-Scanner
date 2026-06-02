@@ -284,7 +284,7 @@ let codeReader=null;
 
 // Scanner
 const COOLDOWN_MS = 2500;
-const CONFIRM_COUNT = 2;
+const CONFIRM_COUNT = 1; // sofort beim ersten Erkennen
 let consecutiveCount=0, lastRawCode='';
 let cooldownActive=false, cooldownTimer=null;
 
@@ -457,7 +457,7 @@ function startScanner(){
     const hints=new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.QR_CODE]);
     hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-    codeReader=new ZXing.BrowserMultiFormatReader(hints, 200); // 200ms scan interval
+    codeReader=new ZXing.BrowserMultiFormatReader(hints, 100); // 200ms scan interval
     // Rückkamera mit hoher Auflösung
     const constraints = {
       video: {
