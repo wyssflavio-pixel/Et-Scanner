@@ -1068,7 +1068,10 @@ function startScanner(){
   try{
     if(codeReader){codeReader.reset();codeReader=null;}
     resetScanState();
-    codeReader=new ZXing.BrowserMultiFormatReader();
+    // Nur QR-Codes lesen (keine 1D-Barcodes die fälschlicherweise erkannt werden)
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
+    codeReader=new ZXing.BrowserMultiFormatReader(hints);
     codeReader.decodeFromVideoDevice(null,'qr-video',(result,err)=>{
       if(currentET||cooldownActive)return;
       if(result){
@@ -1153,6 +1156,11 @@ function manualSearch(){
 }
 
 function showET(et){
+  // Kamera ausblenden
+  document.getElementById('scanner-frame').style.display='none';
+  document.getElementById('mode-strip').style.display='none';
+  document.getElementById('capture-btn').style.display='none';
+  document.querySelector('.search-row').style.display='none';
   document.getElementById('et-num').textContent=et.nr;
   document.getElementById('et-name').textContent=et.bez;
   document.getElementById('et-machine').textContent=et.anlage||'–';
@@ -1174,6 +1182,10 @@ function showET(et){
   document.getElementById('et-card').classList.remove('hidden');
   document.getElementById('menge-card').classList.remove('hidden');
   document.getElementById('m-num').textContent='1';
+  // Zur ET-Karte scrollen
+  setTimeout(()=>{
+    document.getElementById('et-card').scrollIntoView({behavior:'smooth', block:'start'});
+  }, 100);
 }
 
 function setTyp(typ){
@@ -1238,7 +1250,13 @@ function resetScan(){
   currentET=null;menge=1;buchTyp='abgang';
   document.getElementById('et-card').classList.add('hidden');
   document.getElementById('menge-card').classList.add('hidden');
+  // Kamera wieder einblenden
+  document.getElementById('scanner-frame').style.display='block';
+  document.getElementById('mode-strip').style.display='flex';
+  document.querySelector('.search-row').style.display='flex';
   setTyp('abgang');resetScanState();startScanner();
+  // Nach oben scrollen
+  window.scrollTo({top:0, behavior:'smooth'});
 }
 
 function goTab(t){
